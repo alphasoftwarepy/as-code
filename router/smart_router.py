@@ -36,13 +36,13 @@ class SmartRouter:
 
     def __init__(
         self,
-        reasoning_model: str = "deepseek-r1-1.5b",
-        coding_model: str = "gemma-4-e2b",
+        reasoning_model: str = "gemma-3n-web",
+        coding_model: str = "gemma-3n-code",
         default_model: Optional[str] = None,
     ) -> None:
         self.reasoning_model = reasoning_model
         self.coding_model = coding_model
-        self.default_model = default_model or coding_model
+        self.default_model = default_model or reasoning_model
 
         # Model → role mapping for system prompts
         self._model_roles: dict[str, str] = {
@@ -66,14 +66,14 @@ class SmartRouter:
         """
         # Priority 1: Explicit model override
         if explicit_model and explicit_model != "auto":
-            role = self._model_roles.get(explicit_model, "coding")
+            role = self._model_roles.get(explicit_model, "reasoning")
             system_prompt = SYSTEM_PROMPTS.get(role, "")
             logger.debug(f"Explicit model: {explicit_model}")
             return explicit_model, system_prompt
 
         # Priority 2: Keyword-based scoring
         model_id = self._score_message(message)
-        role = self._model_roles.get(model_id, "coding")
+        role = self._model_roles.get(model_id, "reasoning")
         system_prompt = SYSTEM_PROMPTS.get(role, "")
 
         logger.debug(f"Routed to: {model_id} (role={role})")
@@ -96,7 +96,7 @@ class SmartRouter:
         elif coding_score > reasoning_score:
             return self.coding_model
         else:
-            # Tie: default to coding model (more common use case)
+            # Tie: default to general/reasoning model
             return self.default_model
 
     def get_available_models(self) -> list[dict]:
@@ -105,11 +105,11 @@ class SmartRouter:
             {
                 "id": self.reasoning_model,
                 "role": "reasoning",
-                "description": "Reasoning, planning, debugging, analysis",
+                "description": "General conversation, reasoning, planning, and analysis",
             },
             {
                 "id": self.coding_model,
                 "role": "coding",
-                "description": "Code generation, implementation, refactoring",
+                "description": "Code generation, debugging, implementation, and refactoring",
             },
         ]

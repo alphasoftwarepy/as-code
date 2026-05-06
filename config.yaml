@@ -17,23 +17,23 @@ server:
 # Model definitions
 models:
   reasoning:
-    id: "deepseek-r1-1.5b"
-    file: "deepseek-r1-1.5b"
-    type: "reasoning"
-    params_billions: 1.5
-    estimated_vram_mb: 1200
+    id: "gemma-3n-web"
+    file: "models/gemma/gemma-3n-E2B-it-int4.litertlm"
+    type: "general"
+    params_billions: 2.0
+    estimated_vram_mb: 1500
     quantization: "int4"
     capabilities:
-      - reasoning
+      - conversation
       - planning
-      - debugging
       - analysis
-      - chain-of-thought
-    source: "https://huggingface.co/litert-community/DeepSeek-R1-Distill-Qwen-1.5B"
+      - brainstorming
+      - explanations
+    source: "https://huggingface.co/litert-community/gemma-3n-E2B-it-litert-lm"
 
   coding:
-    id: "gemma-4-e2b"
-    file: "gemma-4-e2b"
+    id: "gemma-3n-code"
+    file: "models/gemma/gemma-3n-E2B-it-int4.litertlm"
     type: "coding"
     params_billions: 2.0
     estimated_vram_mb: 1500
@@ -44,7 +44,7 @@ models:
       - implementation
       - refactoring
       - optimization
-    source: "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm"
+    source: "https://huggingface.co/litert-community/gemma-3n-E2B-it-litert-lm"
 
 # Provider configuration
 providers:

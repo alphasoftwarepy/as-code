@@ -79,13 +79,22 @@ cd as-code
 
 ## 🧠 Manual Model Setup (Important)
 
-> **Important Limitation:** Currently, models are **NOT automatically downloaded** due to HuggingFace authentication and token requirements. Automatic model management will be added in a future release. 
+> **Important Limitation:** Models are **NOT automatically downloaded** due to HuggingFace authentication requirements. Automatic model management is planned for a future release.
 
-For now, you must manually download your models and place them in the correct directory:
+AS Code uses a dual-model architecture with two GPU-accelerated Gemma LiteRT models:
 
-1. Download the `.litertlm` model file manually from your official source (e.g., HuggingFace).
-2. Place the downloaded `.litertlm` file inside the `models/` directory in this project.
-3. The setup script and runtime will automatically detect and register models placed in this folder.
+| Role           | Model ID        | File path                                          |
+|----------------|-----------------|----------------------------------------------------|
+| General / Chat | `gemma-3n-web`  | `models/gemma/gemma-3n-E2B-it-int4-Web.litertlm`  |
+| Coding         | `gemma-3n-code` | `models/gemma/gemma-3n-E2B-it-int4.litertlm`      |
+
+**Setup steps:**
+
+1. Create the directory: `models\gemma\`
+2. Download both `.litertlm` files from [HuggingFace — litert-community](https://huggingface.co/litert-community).
+3. Place them in the paths shown above.
+4. Run the server — the runtime detects and registers them automatically.
+
 
 ## 🏃‍♂️ Running the Project
 

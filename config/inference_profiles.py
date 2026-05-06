@@ -26,31 +26,34 @@ class InferenceProfile:
 
 # Default profiles for supported models
 INFERENCE_PROFILES: dict[str, InferenceProfile] = {
-    "deepseek-r1-1.5b": InferenceProfile(
-        model_id="deepseek-r1-1.5b",
-        temperature=0.6,
-        max_tokens=2048,
-        top_k=40,
-        top_p=0.95,
-        context_length=2048,
-        system_prompt=(
-            "You are an expert AI assistant specialized in analysis, "
-            "planning, and reasoning. Think step-by-step."
-        ),
-        quantization="int4",
-        estimated_vram_mb=1200,
-        supports_speculative=False,
-    ),
-    "gemma-4-e2b": InferenceProfile(
-        model_id="gemma-4-e2b",
+    "gemma-3n-web": InferenceProfile(
+        model_id="gemma-3n-web",
         temperature=0.7,
         max_tokens=1024,
         top_k=40,
         top_p=0.95,
         context_length=2048,
         system_prompt=(
-            "You are an expert code generation assistant. Write clean, "
-            "efficient, well-documented code."
+            "You are a helpful, friendly, general-purpose AI assistant. "
+            "You can engage in natural conversation, planning, brainstorming, "
+            "explanations, and analysis. Respond naturally and clearly. "
+            "Only generate code when explicitly requested."
+        ),
+        quantization="int4",
+        estimated_vram_mb=1500,
+        supports_speculative=True,
+    ),
+    "gemma-3n-code": InferenceProfile(
+        model_id="gemma-3n-code",
+        temperature=0.7,
+        max_tokens=1024,
+        top_k=40,
+        top_p=0.95,
+        context_length=2048,
+        system_prompt=(
+            "You are an expert software engineering assistant specialized in "
+            "programming, debugging, APIs, architecture, and development workflows. "
+            "Write clean, efficient, production-ready code."
         ),
         quantization="int4",
         estimated_vram_mb=1500,

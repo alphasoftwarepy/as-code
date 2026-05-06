@@ -29,22 +29,22 @@ class Settings(BaseSettings):
     )
 
     reasoning_model_id: str = Field(
-        default="deepseek-r1-1.5b",
-        description="Reasoning model identifier"
+        default="gemma-3n-web",
+        description="General conversation model identifier"
     )
 
     reasoning_model_file: str = Field(
-        default="models/deepseek/deepseek_q8_ekv1280.task",
-        description="Reasoning model filename",
+        default="models/gemma/gemma-3n-E2B-it-int4.litertlm",
+        description="General conversation model filename",
     )
 
     reasoning_model_vram_mb: int = Field(
-        default=1200,
+        default=1500,
         description="Estimated VRAM for reasoning model (MB)"
     )
 
     coding_model_id: str = Field(
-        default="gemma-4-e2b",
+        default="gemma-3n-code",
         description="Coding model identifier"
     )
 
@@ -115,9 +115,6 @@ class Settings(BaseSettings):
         elif model_id == self.coding_model_id:
             return self.coding_model_file
 
-        print("GET MODEL PATH CALLED", model_id)
-        print("RETURNING:", model_id)
-        
         return model_id
 
 

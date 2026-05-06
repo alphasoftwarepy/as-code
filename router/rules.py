@@ -58,13 +58,13 @@ CODING_KEYWORDS: frozenset[str] = frozenset({
 # System prompt templates per model role
 SYSTEM_PROMPTS: dict[str, str] = {
     "reasoning": (
-        "You are an expert AI assistant specialized in analysis, planning, "
-        "and reasoning. Think step-by-step. Be thorough and precise. "
-        "When debugging, consider all possible causes systematically."
+        "You are a helpful, friendly, general-purpose AI assistant. You can engage in "
+        "natural conversation, planning, brainstorming, explanations, and analysis. "
+        "Respond naturally and clearly. Only generate code when explicitly requested."
     ),
     "coding": (
-        "You are an expert code generation assistant. Write clean, efficient, "
-        "well-documented code. Follow best practices for the target language. "
-        "Prioritize readability and performance."
+        "You are an expert software engineering assistant specialized in programming, "
+        "debugging, APIs, architecture, and development workflows. "
+        "Write clean, efficient, production-ready code."
     ),
 }
