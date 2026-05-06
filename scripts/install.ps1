@@ -51,10 +51,17 @@ foreach ($dir in $directories) {
 
 # 5. Generate .env if missing
 Write-Host "`n[5/6] Checking for .env file..."
+
 if (-not (Test-Path ".env")) {
-    Set-Content -Path ".env" -Value "HOST=127.0.0.1`nPORT=8000"    Write-Host "Created default .env file." -ForegroundColor Green
+
+    Set-Content -Path ".env" -Value "HOST=127.0.0.1`nPORT=8000"
+
+    Write-Host "Created default .env file." -ForegroundColor Green
+
 } else {
+
     Write-Host ".env file already exists." -ForegroundColor Yellow
+
 }
 
 # 6. Verify model folder and manual instructions
