@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AS Code — Local Edge AI</title>
+    <meta name="description" content="Ultra-optimized local AI inference for edge hardware. By Alpha Software.">
+
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CDN (lightweight play CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        surface: {
+                            50: '#f0f2f5',
+                            100: '#e1e5eb',
+                            200: '#c3cbd7',
+                            700: '#1e2433',
+                            800: '#151a26',
+                            900: '#0d1117',
+                            950: '#080b10',
+                        },
+                        accent: {
+                            400: '#6ea8fe',
+                            500: '#4a90e2',
+                            600: '#3a7bd5',
+                        },
+                        gemma: {
+                            400: '#a78bfa',
+                            500: '#8b5cf6',
+                        },
+                        deepseek: {
+                            400: '#34d399',
+                            500: '#10b981',
+                        },
+                    },
+                },
+            },
+        };
+    </script>
+
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="bg-surface-950 text-surface-100 font-sans antialiased min-h-screen flex flex-col">
+
+    <!-- ── Top Bar ──────────────────────────────────────────── -->
+    <header id="header" class="header-bar">
+        <div class="flex items-center gap-3">
+            <!-- Logo -->
+            <div class="logo-mark">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" 
+                          stroke="url(#logo-grad)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    <defs>
+                        <linearGradient id="logo-grad" x1="2" y1="2" x2="22" y2="22">
+                            <stop stop-color="#6ea8fe"/>
+                            <stop offset="1" stop-color="#a78bfa"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
+            </div>
+            <span class="text-sm font-semibold tracking-wide text-surface-200">AS Code</span>
+            <span class="text-xs text-surface-200/40 hidden sm:inline">by Alpha Software</span>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <!-- Status Indicator -->
+            <div id="statusIndicator" class="status-dot status-ready" title="System ready"></div>
+
+            <!-- Telemetry (optional, toggleable) -->
+            <button id="toggleTelemetry" class="icon-btn" title="Toggle telemetry">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M18 20V10M12 20V4M6 20v-6"/>
+                </svg>
+            </button>
+
+            <!-- Settings toggle -->
+            <button id="toggleSettings" class="icon-btn" title="Settings">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M12.22 2h-.44a2 2 0 00-2 2v.18a2 2 0 01-1 1.73l-.43.25a2 2 0 01-2 0l-.15-.08a2 2 0 00-2.73.73l-.22.38a2 2 0 00.73 2.73l.15.1a2 2 0 011 1.72v.51a2 2 0 01-1 1.74l-.15.09a2 2 0 00-.73 2.73l.22.38a2 2 0 002.73.73l.15-.08a2 2 0 012 0l.43.25a2 2 0 011 1.73V20a2 2 0 002 2h.44a2 2 0 002-2v-.18a2 2 0 011-1.73l.43-.25a2 2 0 012 0l.15.08a2 2 0 002.73-.73l.22-.39a2 2 0 00-.73-2.73l-.15-.08a2 2 0 01-1-1.74v-.5a2 2 0 011-1.74l.15-.09a2 2 0 00.73-2.73l-.22-.38a2 2 0 00-2.73-.73l-.15.08a2 2 0 01-2 0l-.43-.25a2 2 0 01-1-1.73V4a2 2 0 00-2-2z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                </svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- ── Telemetry Bar (collapsible) ──────────────────────── -->
+    <div id="telemetryBar" class="telemetry-bar hidden">
+        <div class="telemetry-item">
+            <span class="telemetry-label">RAM</span>
+            <span id="telRam" class="telemetry-value">—</span>
+        </div>
+        <div class="telemetry-item">
+            <span class="telemetry-label">VRAM</span>
+            <span id="telVram" class="telemetry-value">—</span>
+        </div>
+        <div class="telemetry-item">
+            <span class="telemetry-label">tok/s</span>
+            <span id="telTps" class="telemetry-value">—</span>
+        </div>
+        <div class="telemetry-item">
+            <span class="telemetry-label">Model</span>
+            <span id="telModel" class="telemetry-value">—</span>
+        </div>
+        <div class="telemetry-item">
+            <span class="telemetry-label">Provider</span>
+            <span id="telProvider" class="telemetry-value">—</span>
+        </div>
+    </div>
+
+    <!-- ── Settings Panel (collapsible) ─────────────────────── -->
+    <div id="settingsPanel" class="settings-panel hidden">
+        <div class="settings-grid">
+            <!-- Model Selector -->
+            <div class="setting-group">
+                <label class="setting-label" for="modelSelect">Model</label>
+                <select id="modelSelect" class="setting-select">
+                    <option value="auto">Auto (Smart Router)</option>
+                    <option value="deepseek-r1-1.5b">DeepSeek R1 1.5B — Reasoning</option>
+                    <option value="gemma-4-e2b">Gemma 4 E2B — Coding</option>
+                </select>
+            </div>
+
+            <!-- Temperature -->
+            <div class="setting-group">
+                <label class="setting-label" for="temperatureSlider">
+                    Temperature
+                    <span id="tempValue" class="text-accent-400 ml-1">0.7</span>
+                </label>
+                <input type="range" id="temperatureSlider" min="0" max="2" step="0.1" value="0.7" class="setting-slider">
+            </div>
+
+            <!-- Max Tokens -->
+            <div class="setting-group">
+                <label class="setting-label" for="maxTokensInput">
+                    Max Tokens
+                </label>
+                <input type="number" id="maxTokensInput" value="1024" min="64" max="8192" step="64" class="setting-input">
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Chat Area ────────────────────────────────────────── -->
+    <main id="chatArea" class="chat-area">
+        <!-- Welcome Screen -->
+        <div id="welcomeScreen" class="welcome-screen">
+            <div class="welcome-logo">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" 
+                          stroke="url(#welcome-grad)" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <defs>
+                        <linearGradient id="welcome-grad" x1="2" y1="2" x2="22" y2="22">
+                            <stop stop-color="#6ea8fe"/>
+                            <stop offset="1" stop-color="#a78bfa"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
+            </div>
+            <h1 class="welcome-title">AS Code</h1>
+            <p class="welcome-subtitle">Local Edge AI Runtime</p>
+            <div class="welcome-chips">
+                <button class="welcome-chip" data-prompt="Explain how async/await works in Python">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                    Explain async/await
+                </button>
+                <button class="welcome-chip" data-prompt="Write a FastAPI endpoint with streaming response">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                    FastAPI streaming
+                </button>
+                <button class="welcome-chip" data-prompt="Debug: why would a Python dict lose keys during iteration?">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                    Debug dict iteration
+                </button>
+                <button class="welcome-chip" data-prompt="Implement a binary search tree in Python with insert, search, and delete">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                    Binary search tree
+                </button>
+            </div>
+        </div>
+
+        <!-- Messages Container -->
+        <div id="messagesContainer" class="messages-container hidden"></div>
+    </main>
+
+    <!-- ── Input Area ───────────────────────────────────────── -->
+    <footer id="inputArea" class="input-area">
+        <div class="input-wrapper">
+            <div class="input-container">
+                <textarea
+                    id="messageInput"
+                    class="message-input"
+                    placeholder="Send a message..."
+                    rows="1"
+                    autofocus
+                ></textarea>
+                <div class="input-actions">
+                    <!-- Clear Chat -->
+                    <button id="clearBtn" class="icon-btn-sm" title="Clear chat (Ctrl+Shift+K)">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                        </svg>
+                    </button>
+
+                    <!-- Stop Generation -->
+                    <button id="stopBtn" class="stop-btn hidden" title="Stop generation (Esc)">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                            <rect x="6" y="6" width="12" height="12" rx="2"/>
+                        </svg>
+                        Stop
+                    </button>
+
+                    <!-- Send -->
+                    <button id="sendBtn" class="send-btn" title="Send message (Enter)">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="22" y1="2" x2="11" y2="13"/>
+                            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="input-footer">
+                <span class="text-[10px] text-surface-200/30">
+                    AS Code v0.1.0 · LiteRT-LM · Edge AI
+                </span>
+                <span id="routingIndicator" class="routing-indicator hidden"></span>
+            </div>
+        </div>
+    </footer>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,68 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment variables & Tokens
+.env
+.env.*
+!.env.example
+*.token
+tokens.json
+secrets.json
+
+# Models (large files)
+models/**/*.litertlm
+*.litertlm
+models/gemma/
+models/deepseek/
+models/*.tflite
+models/*.task
+models/*.bin
+models/*.gguf
+models/*.safetensors
+
+# Cache
+cache/*
+!cache/.gitkeep
+
+# Logs
+logs/*
+!logs/.gitkeep
+
+# Benchmarks results
+benchmarks/results*.json
+
+# Temporary builds
+temp/
+tmp/
+*.tmp
+*.bak
+tempCodeRunnerFile.py
+.pdm-build/
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# DirectX Shader Compiler
+dxil.dll
+dxcompiler.dll
