@@ -71,7 +71,7 @@ AS Code uses a modular architecture built on top of FastAPI and LiteRT-LM. It ac
 Clone the repository and run the setup script:
 
 ```powershell
-git clone https://github.com/cursosdigitaleshd-del/as-code.git
+git clone https://github.com/alphasoftwarepy/as-code.git
 cd as-code
 .\scripts\install.ps1
 ```
