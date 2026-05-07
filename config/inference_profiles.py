@@ -26,8 +26,8 @@ class InferenceProfile:
 
 # Default profiles for supported models
 INFERENCE_PROFILES: dict[str, InferenceProfile] = {
-    "gemma-3n-web": InferenceProfile(
-        model_id="gemma-3n-web",
+    "chat": InferenceProfile(
+        model_id="chat",
         temperature=0.7,
         max_tokens=5120,
         top_k=40,
@@ -43,8 +43,8 @@ INFERENCE_PROFILES: dict[str, InferenceProfile] = {
         estimated_vram_mb=1500,
         supports_speculative=True,
     ),
-    "gemma-3n-code": InferenceProfile(
-        model_id="gemma-3n-code",
+    "code": InferenceProfile(
+        model_id="code",
         temperature=0.7,
         max_tokens=5120,
         top_k=40,

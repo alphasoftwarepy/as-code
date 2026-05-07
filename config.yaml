@@ -16,10 +16,11 @@ server:
 
 # Model definitions
 models:
-  reasoning:
-    id: "gemma-3n-web"
+  chat:
+    id: "gemma-chat"
     file: "models/gemma/gemma-3n-E2B-it-int4.litertlm"
     type: "general"
+    provider: "litert_cli"
     params_billions: 2.0
     estimated_vram_mb: 1500
     quantization: "int4"
@@ -30,11 +31,11 @@ models:
       - brainstorming
       - explanations
     source: "https://huggingface.co/litert-community/gemma-3n-E2B-it-litert-lm"
-
-  coding:
-    id: "gemma-3n-code"
+  code:
+    id: "gemma-code"
     file: "models/gemma/gemma-3n-E2B-it-int4.litertlm"
     type: "coding"
+    provider: "litert_cli"
     params_billions: 2.0
     estimated_vram_mb: 1500
     quantization: "int4"
@@ -42,8 +43,21 @@ models:
       - coding
       - generation
       - implementation
-      - refactoring
-      - optimization
+    source: "https://huggingface.co/litert-community/gemma-3n-E2B-it-litert-lm"
+
+  reasoning:
+    id: "gemma-reasoning"
+    file: "models/gemma/gemma-3n-E2B-it-int4.litertlm"
+    type: "reasoning"
+    provider: "litert_cli"
+    params_billions: 2.0
+    estimated_vram_mb: 1500
+    quantization: "int4"
+    capabilities:
+      - architecture
+      - analysis
+      - tradeoffs
+      - reasoning
     source: "https://huggingface.co/litert-community/gemma-3n-E2B-it-litert-lm"
 
 # Provider configuration

@@ -92,23 +92,20 @@ async def lifespan(app: FastAPI):
     )
 
     # 6. Register models
-    engine.register_model(
-        model_id=settings.reasoning_model_id,
-        model_path=settings.get_model_path(settings.reasoning_model_id),
-        model_type="reasoning",
-        estimated_vram_mb=settings.reasoning_model_vram_mb,
-    )
-    engine.register_model(
-        model_id=settings.coding_model_id,
-        model_path=settings.get_model_path(settings.coding_model_id),
-        model_type="coding",
-        estimated_vram_mb=settings.coding_model_vram_mb,
-    )
+    for role, cfg in settings.models.items():
+        engine.register_model(
+            model_id=role,
+            model_path=settings.get_model_path(role),
+            model_type=cfg.get("type", "general"),
+            estimated_vram_mb=cfg.get("estimated_vram_mb", 1500),
+            provider_id=cfg.get("provider"),
+        )
 
     # 7. Create smart router
     smart_router = SmartRouter(
-        reasoning_model=settings.reasoning_model_id,
-        coding_model=settings.coding_model_id,
+        chat_model="chat",
+        coding_model="code",
+        reasoning_model="reasoning",
     )
 
     # 8. Start engine
@@ -123,7 +120,7 @@ async def lifespan(app: FastAPI):
     logger.info(f"API ready at http://{settings.host}:{settings.port}/v1")
     logger.info(f"UI  ready at http://{settings.host}:{settings.port}/")
     logger.info(f"Active provider: {settings.active_provider}")
-    logger.info(f"Models: {settings.reasoning_model_id}, {settings.coding_model_id}")
+    logger.info(f"Models: {list(settings.models.keys())}")
     logger.info("=" * 60)
 
     yield

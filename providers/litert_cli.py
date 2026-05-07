@@ -115,6 +115,10 @@ class LiteRTCLIProvider(InferenceProvider):
                 self._last_error = "CLI not found (install: uv tool install litert-lm)"
                 return
 
+            env = os.environ.copy()
+            env["PYTHONUTF8"] = "1"
+            env["PYTHONIOENCODING"] = "utf-8"
+
             # Quick version check
             proc = subprocess.Popen(
                 [self._cli_path, "--version"],
@@ -123,6 +127,7 @@ class LiteRTCLIProvider(InferenceProvider):
                 text=True,
                 encoding="utf-8",
                 errors="replace",
+                env=env,
             )
 
             stdout, stderr = proc.communicate(timeout=10)
@@ -247,6 +252,11 @@ class LiteRTCLIProvider(InferenceProvider):
             self._status = ProviderStatus.BUSY
             logger.info(f"Starting LiteRT-LM subprocess: {' '.join(cmd)}")
 
+            # Force UTF-8 for the subprocess (essential on Windows)
+            env = os.environ.copy()
+            env["PYTHONUTF8"] = "1"
+            env["PYTHONIOENCODING"] = "utf-8"
+
             # Merge stderr into stdout to avoid deadlock and capture all info
             proc = subprocess.Popen(
                 cmd,
@@ -257,6 +267,7 @@ class LiteRTCLIProvider(InferenceProvider):
                 errors="replace",
                 bufsize=1, # Line buffered for stdout (if supported)
                 stdin=subprocess.DEVNULL,
+                env=env,
             )
             
             self._active_processes[request.model_id] = proc

@@ -133,6 +133,7 @@ class EngineManager:
         model_path: str,
         model_type: str = "general",
         estimated_vram_mb: int = 1500,
+        provider_id: Optional[str] = None,
     ) -> None:
         """Register a model configuration.
         Does NOT load the model — loading is lazy."""
@@ -140,6 +141,7 @@ class EngineManager:
             "path": model_path,
             "type": model_type,
             "estimated_vram_mb": estimated_vram_mb,
+            "provider_id": provider_id,
         }
         logger.info(f"Model registered: {model_id} (type={model_type})")
 
@@ -147,9 +149,8 @@ class EngineManager:
 
     async def generate(self, request: InferenceRequest) -> InferenceResult:
         """Run inference (non-streaming). Handles model loading."""
-        await self._ensure_model_loaded(request.model_id)
+        provider = await self._ensure_model_loaded(request.model_id)
 
-        provider = self.registry.active_provider
         if provider is None:
             return InferenceResult(
                 text="No active inference provider",
@@ -164,9 +165,8 @@ class EngineManager:
         self, request: InferenceRequest
     ) -> AsyncIterator[InferenceResult]:
         """Run inference (streaming). Handles model loading."""
-        await self._ensure_model_loaded(request.model_id)
+        provider = await self._ensure_model_loaded(request.model_id)
 
-        provider = self.registry.active_provider
         if provider is None:
             yield InferenceResult(
                 text="No active inference provider",
@@ -179,28 +179,36 @@ class EngineManager:
         async for chunk in provider.generate_stream(request):
             yield chunk
 
-    async def cancel_generation(self, request_id: str) -> None:
+    async def cancel_generation(self, request_id: str, model_id: Optional[str] = None) -> None:
         """Cancel an in-progress generation."""
-        provider = self.registry.active_provider
+        if model_id and model_id in self._model_configs:
+            config = self._model_configs[model_id]
+            provider_id = config.get("provider_id")
+            provider = self.registry.get_provider(provider_id) if provider_id else self.registry.active_provider
+        else:
+            provider = self.registry.active_provider
+            
         if provider:
             await provider.cancel_generation(request_id)
 
     # ── Model Loading ──────────────────────────────────────────
 
-    async def _ensure_model_loaded(self, model_id: str) -> None:
+    async def _ensure_model_loaded(self, model_id: str) -> InferenceProvider:
         """Ensure a model is loaded. Lazy load if needed.
         Implements anti-OOM protection and VRAM-aware loading."""
-        provider = self.registry.active_provider
-        if provider is None:
-            raise RuntimeError("No active provider")
-
-        if await provider.is_model_loaded(model_id):
-            return
-
         if model_id not in self._model_configs:
             raise ValueError(f"Model '{model_id}' not registered")
 
         config = self._model_configs[model_id]
+        provider_id = config.get("provider_id")
+        
+        provider = self.registry.get_provider(provider_id) if provider_id else self.registry.active_provider
+        
+        if provider is None:
+            raise RuntimeError(f"No provider found for model '{model_id}' (provider_id={provider_id})")
+
+        if await provider.is_model_loaded(model_id):
+            return provider
 
         # Anti-OOM check
         await self._check_resources(config["estimated_vram_mb"])
@@ -220,6 +228,7 @@ class EngineManager:
         await provider.load_model(model_id, config["path"])
         self._active_model = model_id
         self._last_used[model_id] = time.time()
+        return provider
 
     async def _check_resources(self, required_vram_mb: int) -> None:
         """Check if we have enough resources to load a model.

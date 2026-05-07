@@ -154,14 +154,17 @@ async def get_status(request: Request):
 
 
 @router.post("/cancel")
-async def cancel_generation(request: Request, request_id: str = ""):
+async def cancel_generation(request: Request, request_id: str = "", model_id: str = ""):
     """Cancel an in-progress generation."""
     if not request_id:
         raise HTTPException(status_code=400, detail="request_id required")
 
     engine = request.app.state.engine
-    await engine.cancel_generation(request_id)
-    return {"status": "cancelled", "request_id": request_id}
+    # We don't have model_id here usually, but engine.cancel_generation 
+    # will fall back to active_provider if not provided.
+    # Pass model_id to engine so it can route to the correct provider
+    await engine.cancel_generation(request_id, model_id)
+    return {"status": "cancelled", "request_id": request_id, "model_id": model_id}
 
 
 # ── GET /v1/providers ──────────────────────────────────────────

@@ -8,8 +8,9 @@ All configuration is centralized here.
 from __future__ import annotations
 
 import os
+import yaml
 from functools import lru_cache
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings
@@ -28,35 +29,26 @@ class Settings(BaseSettings):
         default="models", description="Directory for model files"
     )
 
-    reasoning_model_id: str = Field(
-        default="gemma-3n-web",
-        description="General conversation model identifier"
-    )
+    _config: Dict[str, Any] = {}
 
-    reasoning_model_file: str = Field(
-        default="models/gemma/gemma-3n-E2B-it-int4.litertlm",
-        description="General conversation model filename",
-    )
+    def __init__(self, **values):
+        super().__init__(**values)
+        self._load_config()
 
-    reasoning_model_vram_mb: int = Field(
-        default=1500,
-        description="Estimated VRAM for reasoning model (MB)"
-    )
+    def _load_config(self):
+        """Load configuration from config.yaml if it exists."""
+        config_path = "config.yaml"
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, "r", encoding="utf-8") as f:
+                    self._config = yaml.safe_load(f) or {}
+            except Exception as e:
+                print(f"Error loading config.yaml: {e}")
 
-    coding_model_id: str = Field(
-        default="gemma-3n-code",
-        description="Coding model identifier"
-    )
-
-    coding_model_file: str = Field(
-        default="models/gemma/gemma-3n-E2B-it-int4.litertlm",
-        description="Coding model filename",
-    )
-
-    coding_model_vram_mb: int = Field(
-        default=1500,
-        description="Estimated VRAM for coding model (MB)"
-    )
+    @property
+    def models(self) -> Dict[str, Any]:
+        """Get model definitions from config."""
+        return self._config.get("models", {})
 
     # ── Provider ───────────────────────────────────────────────
     active_provider: str = Field(
@@ -106,16 +98,12 @@ class Settings(BaseSettings):
         "case_sensitive": False,
     }
 
-    def get_model_path(self, model_id: str) -> str:
-        """Resolve LiteRT model registry reference."""
-
-        if model_id == self.reasoning_model_id:
-            return self.reasoning_model_file
-
-        elif model_id == self.coding_model_id:
-            return self.coding_model_file
-
-        return model_id
+    def get_model_path(self, role: str) -> str:
+        """Resolve model path from role."""
+        model_cfg = self.models.get(role)
+        if model_cfg:
+            return model_cfg.get("file", "")
+        return role
 
 
 @lru_cache(maxsize=1)

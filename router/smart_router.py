@@ -36,18 +36,21 @@ class SmartRouter:
 
     def __init__(
         self,
-        reasoning_model: str = "gemma-3n-web",
-        coding_model: str = "gemma-3n-code",
+        chat_model: str = "chat",
+        coding_model: str = "code",
+        reasoning_model: str = "reasoning",
         default_model: Optional[str] = None,
     ) -> None:
-        self.reasoning_model = reasoning_model
+        self.chat_model = chat_model
         self.coding_model = coding_model
-        self.default_model = default_model or reasoning_model
+        self.reasoning_model = reasoning_model
+        self.default_model = default_model or chat_model
 
         # Model → role mapping for system prompts
         self._model_roles: dict[str, str] = {
-            reasoning_model: "reasoning",
+            chat_model: "reasoning",  # 'chat' uses general reasoning prompt
             coding_model: "coding",
+            reasoning_model: "reasoning",
         }
 
     def route(
@@ -66,14 +69,14 @@ class SmartRouter:
         """
         # Priority 1: Explicit model override
         if explicit_model and explicit_model != "auto":
-            role = self._model_roles.get(explicit_model, "reasoning")
+            role = self._model_roles.get(explicit_model, explicit_model)
             system_prompt = SYSTEM_PROMPTS.get(role, "")
             logger.debug(f"Explicit model: {explicit_model}")
             return explicit_model, system_prompt
 
         # Priority 2: Keyword-based scoring
         model_id = self._score_message(message)
-        role = self._model_roles.get(model_id, "reasoning")
+        role = self._model_roles.get(model_id, model_id)
         system_prompt = SYSTEM_PROMPTS.get(role, "")
 
         logger.debug(f"Routed to: {model_id} (role={role})")
@@ -81,9 +84,11 @@ class SmartRouter:
 
     def _score_message(self, message: str) -> str:
         """Score message against keyword sets.
-
-        Uses word-level matching with frozenset intersection
-        for O(min(n, m)) performance where n = words, m = keywords.
+        
+        Logic:
+        - High score in Reasoning keywords -> Reasoning model
+        - High score in Coding keywords -> Coding model
+        - Tie or low scores -> Chat model (Default)
         """
         # Normalize and tokenize
         words = frozenset(message.lower().split())
@@ -91,25 +96,29 @@ class SmartRouter:
         reasoning_score = len(words & REASONING_KEYWORDS)
         coding_score = len(words & CODING_KEYWORDS)
 
-        if reasoning_score > coding_score:
+        if reasoning_score > coding_score and reasoning_score > 0:
             return self.reasoning_model
-        elif coding_score > reasoning_score:
+        elif coding_score >= reasoning_score and coding_score > 0:
             return self.coding_model
         else:
-            # Tie: default to general/reasoning model
-            return self.default_model
+            return self.chat_model
 
     def get_available_models(self) -> list[dict]:
         """Return model metadata for API responses."""
         return [
             {
-                "id": self.reasoning_model,
-                "role": "reasoning",
-                "description": "General conversation, reasoning, planning, and analysis",
+                "id": self.chat_model,
+                "role": "chat",
+                "description": "Natural conversation and general information (Gemma Web)",
             },
             {
                 "id": self.coding_model,
-                "role": "coding",
-                "description": "Code generation, debugging, implementation, and refactoring",
+                "role": "code",
+                "description": "Expert coding and technical implementation (Gemma Base)",
+            },
+            {
+                "id": self.reasoning_model,
+                "role": "reasoning",
+                "description": "Deep analysis and complex reasoning (Gemma Base)",
             },
         ]

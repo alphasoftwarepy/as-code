@@ -249,7 +249,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // ONLY call /v1/cancel when the user explicitly aborted.
             // Do NOT cancel after successful completion — the stream already ended cleanly.
             if (wasUserAborted && state.currentRequestId) {
-                fetch(`/v1/cancel?request_id=${state.currentRequestId}`, { method: 'POST' }).catch(() => {});
+                const modelId = elements.modelSelect.value;
+                fetch(`/v1/cancel?request_id=${state.currentRequestId}&model_id=${modelId}`, { method: 'POST' }).catch(() => {});
             }
             state.currentRequestId = null;
         }
@@ -312,9 +313,9 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.routingIndicator.classList.remove('hidden');
         elements.routingIndicator.textContent = modelId;
         
-        if (modelId.includes('deepseek')) {
+        if (modelId === 'chat') {
             elements.routingIndicator.className = 'routing-indicator routing-reasoning';
-        } else if (modelId.includes('gemma')) {
+        } else if (modelId === 'code') {
             elements.routingIndicator.className = 'routing-indicator routing-coding';
         } else {
             elements.routingIndicator.className = 'routing-indicator';
