@@ -30,6 +30,7 @@ from api.models import (
     UsageInfo,
 )
 from api.streaming import stream_inference_results
+from api.document_service import get_document_service
 from providers.base import InferenceRequest
 
 logger = logging.getLogger("as-code.api.routes")
@@ -60,6 +61,14 @@ async def chat_completions(body: ChatCompletionRequest, request: Request):
     user_message = body.get_last_user_message()
     if not user_message:
         raise HTTPException(status_code=400, detail="No user message provided")
+
+    # ── RAG: Inyectar contexto de documentos si hay sesión ──────
+    session_id = request.headers.get("X-Document-Session-Id")
+    if session_id:
+        doc_context = get_document_service().get_context(session_id, max_chars=8000)
+        if doc_context and body.messages:
+            last = body.messages[-1]
+            last.content = f"{doc_context}\n\n---PREGUNTA---\n{last.content}"
 
     # Route to optimal model
     model_param = body.model if body.model != "auto" else None

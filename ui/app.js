@@ -152,7 +152,12 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const response = await fetch('/v1/chat/completions', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(typeof documentSessionId !== 'undefined' && documentSessionId
+                        ? { 'X-Document-Session-Id': documentSessionId }
+                        : {}),
+                },
                 body: JSON.stringify(requestBody),
                 signal: state.abortController.signal
             });

@@ -13,6 +13,7 @@ AS Code is evolving into a fast, lightweight, general-purpose local AI runtime. 
 * Premium Minimal Web UI
 * Model Hot-Swap Support
 * **Multi-Role Support:** Dedicated roles for Chat, Code, and Reasoning with Gemma.
+* **Document-Aware Chat (RAG):** Upload TXT, PDF, or DOCX files and chat with their contents locally — no cloud required.
 
 ## 🚧 Current Priorities
 

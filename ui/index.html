@@ -225,10 +225,22 @@
     <!-- ── Input Area ───────────────────────────────────────── -->
     <footer id="inputArea" class="input-area">
         <div class="input-wrapper">
-            <div class="input-container">
+            <div id="inputContainer" class="input-container">
+                <!-- Doc chips (archivos cargados) -->
+                <div id="docChips" style="display:none; flex-wrap:wrap; gap:0.35em; padding:0.5em 0.75em 0 0.75em;"></div>
+
                 <textarea id="messageInput" class="message-input" placeholder="Send a message..." rows="1"
                     autofocus></textarea>
                 <div class="input-actions">
+                    <!-- Attach file (paperclip) -->
+                    <input type="file" id="documentInput" accept=".txt,.pdf,.docx" style="display:none;" multiple />
+                    <button id="attachBtn" class="icon-btn-sm" title="Attach document (.txt .pdf .docx)"
+                        onclick="document.getElementById('documentInput').click()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
+                        </svg>
+                    </button>
+
                     <!-- Clear Chat -->
                     <button id="clearBtn" class="icon-btn-sm" title="Clear chat (Ctrl+Shift+K)">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -264,6 +276,7 @@
         </div>
     </footer>
 
+    <script src="/static/document_ui.js"></script>
     <script src="/static/app.js"></script>
 </body>
 

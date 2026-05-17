@@ -28,6 +28,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from api.routes import router as api_router
+from api.document_routes import documents_router
 from config.settings import get_settings
 from core.engine import EngineManager
 from core.hardware import detect_hardware
@@ -111,6 +112,10 @@ async def lifespan(app: FastAPI):
     # 8. Start engine
     await engine.start()
 
+    # Create uploads directory for document sessions
+    from pathlib import Path
+    Path(settings.uploads_dir if hasattr(settings, "uploads_dir") else "uploads").mkdir(exist_ok=True)
+
     # Store in app state (accessible from routes)
     app.state.engine = engine
     app.state.router = smart_router
@@ -153,6 +158,7 @@ app.add_middleware(
 
 # Mount API routes
 app.include_router(api_router)
+app.include_router(documents_router)
 
 
 # ── UI Routes ──────────────────────────────────────────────────
