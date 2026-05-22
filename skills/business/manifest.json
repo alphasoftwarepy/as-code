@@ -1,0 +1,10 @@
+{
+  "id": "business",
+  "name": "Business Advisor",
+  "description": "Small business strategy, pricing, growth and operations",
+  "required_scopes": [
+    "documents.read",
+    "rag.retrieve"
+  ],
+  "enabled": true
+}

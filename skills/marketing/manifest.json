@@ -1,0 +1,10 @@
+{
+  "id": "marketing",
+  "name": "Marketing Assistant",
+  "description": "Campaigns, branding and social media support",
+  "required_scopes": [
+    "documents.read",
+    "rag.retrieve"
+  ],
+  "enabled": true
+}

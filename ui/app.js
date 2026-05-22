@@ -119,6 +119,16 @@ document.addEventListener('DOMContentLoaded', () => {
         appendMessage('user', text);
         state.chatHistory.push({ role: 'user', content: text });
 
+        // Run skill suggestion engine on each user message
+        if (window.skillsUI) {
+            const docChips = document.getElementById('docChips');
+            const docNames = docChips
+                ? [...docChips.querySelectorAll('span[title]')]
+                    .map(el => el.getAttribute('title') || '')
+                : [];
+            window.skillsUI.analyzeContext(text, docNames);
+        }
+
         await startGeneration();
     }
 
@@ -149,15 +159,24 @@ document.addEventListener('DOMContentLoaded', () => {
             stream: true
         };
 
+        const headers = {
+            'Content-Type': 'application/json'
+        };
+        // Read active skill from SkillsUI (authoritative state);
+        // falls back to hidden #skillSelect for compatibility.
+        const activeSkillId = window.skillsUI?.getActiveSkillId()
+            || (() => {
+                const sel = document.getElementById('skillSelect');
+                return (sel && sel.value && sel.value !== 'none') ? sel.value : null;
+            })();
+        if (activeSkillId) {
+            headers['X-Skill'] = activeSkillId;
+        }
+
         try {
             const response = await fetch('/v1/chat/completions', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...(typeof documentSessionId !== 'undefined' && documentSessionId
-                        ? { 'X-Document-Session-Id': documentSessionId }
-                        : {}),
-                },
+                headers: headers,
                 body: JSON.stringify(requestBody),
                 signal: state.abortController.signal
             });
@@ -386,6 +405,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // Start polling
     setInterval(pollStatus, 5000);
     pollStatus();
+    
+    // Initialize Capabilities UI if loaded
+    if (window.capabilitiesUI) {
+        window.capabilitiesUI.init();
+    }
+
+    // NOTE: SkillsUI self-initializes via its own DOMContentLoaded in skills_ui.js.
+    // No explicit .init() call needed here.
+    if (!window.skillsUI) {
+        console.warn('[app.js] window.skillsUI not found — ensure /static/skills_ui.js loads before app.js');
+    }
     
     // Initial focus
     elements.messageInput.focus();

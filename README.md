@@ -8,33 +8,28 @@ AS Code is a lightweight, general-purpose local AI runtime designed for speed an
 
 ## Current Status
 
-AS Code is currently in an early public release stage.
+AS Code is currently in an active development stage, evolving from a local chat server into an extensible **Local AI Operating Layer** (similar to Claude Code, Cursor, or NotebookLM, but run 100% offline via LiteRT on Windows).
 
-Core runtime functionality is already operational:
-- LiteRT-LM Windows inference
-- GPU acceleration
-- OpenAI-compatible API
-- SSE streaming
-- Local browser UI
-- **Document upload & RAG context injection** (TXT / PDF / DOCX)
+Core architecture and **Phase 1 (NotebookLM RAG)** are fully completed:
+- LiteRT-LM Windows inference (GPU accelerated)
+- OpenAI-compatible chat API (`/v1/chat/completions`) and SSE streaming
+- Minimal UI for browser chat
+- **RAG NotebookLM (RAG v2):** Local embeddings (`bge-small-en-v1.5`), FAISS CPU vector index, SQLite metadata storage, AST-based/heading-based chunking, hybrid semantic + keyword (BM25) retrieval, and structured hierarchical context injection (`NotebookContextBuilder`). Legacy prompt stuffing has been completely eliminated.
 
-Current focus:
-- Stability
-- Installation experience
-- VSCode/Cline integration
-- Backend hardening
-
-Advanced optimization and autonomous systems are planned for future phases.
+Current focus (Phase 2):
+- Authentication & private data isolation (JWT, private folders/DBs per user)
+- Premium Workspace UI (chat history, multi-conversation auto-save)
+- Extensible Skills System (MCP tools, Claude Code terminal/filesystem compatibility)
 
 ## 🚀 Key Features
 
-*   **LiteRT-LM Runtime:** Ultra-optimized inference engine for Windows.
-*   **Hardware-Adaptive:** Automatically adjusts to your system's VRAM and CPU capabilities.
-*   **Browser-First Experience:** A premium, minimal local web UI for everyday use.
-*   **OpenAI-Compatible API:** Use AS Code as a drop-in backend for any tool that supports OpenAI.
-*   **Low VRAM Optimization:** Intelligent model loading and hot-swapping.
-*   **Document-Aware Chat:** Upload TXT, PDF, or DOCX files and chat with their contents directly in the browser.
-*   **Optional Extensions:** Seamlessly integrates with VSCode/Cline when you need a coding companion.
+*   **LiteRT-LM Runtime:** Ultra-optimized inference engine for Windows hardware.
+*   **Hardware-Adaptive Profiles:** Auto-tunes settings (such as models and VRAM limits) to match your system's specs.
+*   **Browser-First UI:** Premium, minimal browser interface with direct document drop zone.
+*   **OpenAI-Compatible API:** Serve as a backend for VS Code extensions (Cline, Continue, etc.).
+*   **RAG NotebookLM (RAG v2):** Multi-stage local pipeline: parses, chunks (AST-aware), generates local embeddings, stores metadata in SQLite + vectors in FAISS, and executes hybrid retrieval.
+*   **Structured Context Builder:** Composes retrieval context dynamically by grouping chunks under `## CONTEXT FROM DOCUMENTS` by file and section.
+*   **Low-Overhead Hot-Swapping:** Intelligent model loading and idle timeout unloads.
 
 ## 📸 Screenshots
 
@@ -105,6 +100,11 @@ The full dependency list is in `requirements.txt`. Key packages:
 | `psutil` | System monitoring |
 | `pyyaml` | Config file parsing |
 | `httpx` | HTTP client |
+| `sqlalchemy` | SQLite persistence (RAG metadata) |
+| `sentence-transformers` | Local embeddings — BAAI/bge-small-en-v1.5 (RAG v2) |
+| `faiss-cpu` | Vector search index (RAG v2) |
+| `rank-bm25` | Keyword retrieval for hybrid RAG (RAG v2) |
+| `numpy` | Embedding array operations (RAG v2) |
 
 To install manually:
 ```powershell
@@ -169,6 +169,70 @@ DELETE /api/documents/<session_id>   → Clear session
 
 Include `X-Document-Session-Id: <session_id>` as a header in your `/v1/chat/completions` requests to activate context injection.
 
+## 🧠 RAG NotebookLM Pipeline (v2)
+
+AS Code includes a full vector-search RAG pipeline for deeper, more precise document-aware conversations. It runs 100% locally — no cloud, no API keys required.
+
+### Activation
+
+Add to your `.env`:
+```
+ASCODE_ENABLE_RAG_MODE=true
+```
+
+### What it does differently from RAG v1
+
+| | RAG v1 | RAG v2 |
+|---|---|---|
+| Storage | In-memory sessions | SQLite (persistent) |
+| Retrieval | Full text injection | FAISS vector search + BM25 hybrid |
+| Context | Truncated raw text | Hierarchy-aware grouped context |
+| Code files | ❌ | ✅ AST chunking by function/class |
+| Relevance | None | Cosine similarity score per chunk |
+
+### Supported file types & chunking strategy
+
+| Format | Strategy |
+|---|---|
+| `.py` | AST — by function/class boundaries with symbol metadata |
+| `.md`, `.rst` | By heading hierarchy (`#`, `##`, …) |
+| `.js`, `.ts`, `.go`, etc. | By function/class (regex) |
+| `.pdf` | Semantic paragraph blocks |
+| `.txt`, `.docx` | Fixed-size with overlap |
+
+### Upload a document
+
+```bash
+# Chat pipeline (documents, notes, PDFs)
+curl -X POST http://localhost:8000/api/rag/documents/upload \
+  -F "file=@README.md" -F "pipeline=chat"
+
+# Code pipeline (source files)
+curl -X POST http://localhost:8000/api/rag/documents/upload \
+  -F "file=@api/engine.py" -F "pipeline=code"
+```
+
+### Chat with RAG context
+
+```bash
+curl -X POST http://localhost:8000/v1/chat/completions \
+  -H "X-Enable-RAG: true" \
+  -H "X-Mode: normal" \
+  -H "X-Pipeline: chat" \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"Explain GPU fallback"}],"model":"auto"}'
+```
+
+**Request headers:**
+
+| Header | Values | Default |
+|---|---|---|
+| `X-Enable-RAG` | `true` / `false` | `true` when RAG enabled globally |
+| `X-Mode` | `normal` / `thinking` / `code` | `normal` |
+| `X-Pipeline` | `chat` / `code` | `chat` |
+
+
+
 ## 🔌 API Endpoints
 
 Once running, the API is available at `http://localhost:8000`.
@@ -182,11 +246,41 @@ Once running, the API is available at `http://localhost:8000`.
 | `/v1/status` | GET | System status (hardware, VRAM, provider) |
 | `/v1/cancel` | POST | Cancel in-progress generation |
 | `/v1/providers` | GET | List registered inference providers |
-| `/api/documents/session` | POST | Create document session |
-| `/api/documents/upload` | POST | Upload TXT/PDF/DOCX |
-| `/api/documents/{id}` | GET | List documents in session |
-| `/api/documents/{id}` | DELETE | Clear document session |
+| `/api/rag/documents/upload` | POST | Upload & ingest document (NotebookLM RAG) |
+| `/api/rag/documents` | GET | List RAG documents with chunk counts |
+| `/api/rag/documents/{id}` | DELETE | Delete document + chunks + physical files + vectors |
+| `/api/rag/retrieve` | POST | Debug: raw chunk retrieval |
+| `/api/rag/context` | POST | Debug: preview NotebookLM context |
 | `/docs` | GET | Interactive API docs (Swagger) |
+| `/v1/capabilities` | GET | Retrieve dynamic runtime capabilities status |
+| `/api/documents/*` | * | *(Deprecated)* Legacy session-based document endpoints |
+
+## 🧠 Runtime Capabilities
+
+AS Code is designed to be hardware-aware, provider-aware, and runtime-modular. Functionalities are not hardcoded; instead, they are dynamically discovered and evaluated lazily using the **Runtime Capability System**. 
+
+The UI queries `GET /v1/capabilities` to render controls dynamically rather than displaying inactive or fake features.
+
+Each capability is returned with metadata, category, and security scopes:
+```json
+{
+  "terminal": {
+    "id": "terminal",
+    "name": "Terminal Execution",
+    "description": "Run terminal commands and shell processes directly on host system",
+    "category": "developer",
+    "version": "1.0.0",
+    "available": true,
+    "enabled": false,
+    "provider": "powershell",
+    "status": "offline",
+    "reason": "Disabled for security reasons. Can be enabled via capability overrides.",
+    "scopes": ["terminal.execute"]
+  }
+}
+```
+
+Capabilities are organized by categories (`core`, `documents`, `tools`, `multimodal`, `developer`, `network`) and define explicit security `scopes` which future Skills will consume. Users can explicitly enable/disable capabilities globally via the `capability_overrides` dictionary setting.
 
 ## 🔌 VSCode / Cline Compatibility
 
@@ -194,9 +288,10 @@ AS Code exposes an OpenAI-compatible API, making it fully compatible with VSCode
 
 ## 🗺 Roadmap Overview
 
-- **Completed:** Core architecture, LiteRT Windows runtime, GPU support, OpenAI API, minimal UI, document upload & RAG context injection.
-- **Upcoming:** VSCode/Cline integration guide, install hardening, GPU fallback, YAML-driven multi-model profiles.
-- **Future Goals:** Agents, Workflows, Autonomous systems, Advanced memory optimization, Automatic model downloads, vector-store RAG.
+- **Completed (Phase 1):** LiteRT core runtime, GPU acceleration, OpenAI API, minimal browser UI, and **NotebookLM RAG Pipeline** (hybrid search, local embeddings, FAISS, AST chunking, hierarchy context composition).
+- **In Progress (Phase 2):** **Runtime Capability System** (dynamic capability registry, safety overrides, lazy capability-aware API).
+- **Upcoming (Phase 3 & 4):** Workspace & Persistence (chats, state, multi-tenant isolation), Skill Runtime v1 (manifests, scopes, injection).
+- **Future (Phase 5 to 8):** Skill Builder, Tools & MCP Execution, local marketplace import/export, and Claude/MCP Translation Layer.
 
 ## 🤝 Contributing
 

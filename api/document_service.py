@@ -67,7 +67,7 @@ class DocumentService:
     - Cleanup automático
     """
 
-    def __init__(self, upload_dir: str = "uploads"):
+    def __init__(self, upload_dir: str = "data/uploads"):
         self.upload_dir = Path(upload_dir)
         self.upload_dir.mkdir(exist_ok=True)
 

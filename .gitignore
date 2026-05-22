@@ -69,3 +69,9 @@ dxcompiler.dll
 
 # Local developer notes (not for public repo)
 dev-notes/
+
+# RAG Data & Uploads (Phase 2 isolation)
+data/*
+!data/.gitkeep
+uploads/
+*.db

@@ -1,0 +1,10 @@
+{
+  "id": "content_creator",
+  "name": "Content Creator",
+  "description": "Instagram posts, reels, hooks, captions and content planning",
+  "required_scopes": [
+    "documents.read",
+    "rag.retrieve"
+  ],
+  "enabled": true
+}

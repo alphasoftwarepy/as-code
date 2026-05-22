@@ -1,0 +1,10 @@
+{
+  "id": "legal",
+  "name": "Legal Assistant",
+  "description": "Contract analysis and business legal basics — informational only",
+  "required_scopes": [
+    "documents.read",
+    "rag.retrieve"
+  ],
+  "enabled": true
+}

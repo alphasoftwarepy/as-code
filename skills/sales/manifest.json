@@ -1,0 +1,10 @@
+{
+  "id": "sales",
+  "name": "Sales Closer",
+  "description": "Close deals, handle objections, and convert prospects",
+  "required_scopes": [
+    "documents.read",
+    "rag.retrieve"
+  ],
+  "enabled": true
+}

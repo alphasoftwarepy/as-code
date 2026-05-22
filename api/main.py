@@ -29,6 +29,10 @@ from fastapi.staticfiles import StaticFiles
 
 from api.routes import router as api_router
 from api.document_routes import documents_router
+from api.rag_routes import rag_router
+from api.capability_routes import capabilities_router
+from api.skill_routes import skills_router
+from api.memory_routes import memory_router
 from config.settings import get_settings
 from core.engine import EngineManager
 from core.hardware import detect_hardware
@@ -114,7 +118,46 @@ async def lifespan(app: FastAPI):
 
     # Create uploads directory for document sessions
     from pathlib import Path
-    Path(settings.uploads_dir if hasattr(settings, "uploads_dir") else "uploads").mkdir(exist_ok=True)
+    Path(settings.uploads_dir).mkdir(parents=True, exist_ok=True)
+    Path(Path(settings.uploads_dir) / "rag").mkdir(parents=True, exist_ok=True)
+
+    # ── RAG NotebookLM Pipeline ────────────────────────────────
+    if settings.enable_rag_mode:
+        logger.info("Initializing RAG NotebookLM pipeline...")
+        try:
+            from api.database import init_db
+            from api.rag_service import build_rag_service
+
+            init_db(settings.rag_db_path)
+
+            rag_service = build_rag_service(
+                faiss_index_path=settings.faiss_index_path,
+                embedding_dim=settings.rag_embedding_dim,
+                embedder_model=settings.rag_embedder_model,
+                chunk_size=settings.rag_chunk_size,
+                chunk_overlap=settings.rag_chunk_overlap,
+                retrieval_mode=settings.rag_retrieval_mode,
+                hybrid_alpha=settings.rag_hybrid_alpha,
+            )
+            app.state.rag_service = rag_service
+            logger.info("RAG pipeline ready ✓")
+        except Exception as e:
+            logger.error(f"RAG initialization failed: {e} — continuing without RAG")
+            app.state.rag_service = None
+    else:
+        app.state.rag_service = None
+        logger.info("RAG mode disabled (set ASCODE_ENABLE_RAG_MODE=true to enable)")
+
+    # Load skills at startup
+    from runtime.skills.loader import get_skill_loader
+    skill_loader = get_skill_loader()
+    skill_loader.load_skills()
+    app.state.skill_service = skill_loader
+
+    # ── Working Memory ─────────────────────────────────────────
+    from runtime.memory.manager import WorkingMemoryManager
+    app.state.memory = WorkingMemoryManager()
+    logger.info("Working memory service ready ✓")
 
     # Store in app state (accessible from routes)
     app.state.engine = engine
@@ -156,9 +199,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Prevent caching of static assets (JS/CSS)
+@app.middleware("http")
+async def add_no_cache_headers(request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
 # Mount API routes
 app.include_router(api_router)
 app.include_router(documents_router)
+app.include_router(rag_router)
+app.include_router(capabilities_router)
+app.include_router(skills_router)
+logger.info("Skills router mounted at /v1/skills ✓")
+app.include_router(memory_router)
+logger.info("Memory router mounted at /v1/memory ✓")
 
 
 # ── UI Routes ──────────────────────────────────────────────────
@@ -174,7 +233,11 @@ async def serve_ui():
     """Serve the minimal web UI."""
     index_path = os.path.join(ui_dir, "index.html")
     if os.path.exists(index_path):
-        return FileResponse(index_path)
+        response = FileResponse(index_path)
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
     return HTMLResponse(
         "<html><body><h1>AS Code</h1>"
         "<p>UI not found. Place index.html in /ui/</p>"

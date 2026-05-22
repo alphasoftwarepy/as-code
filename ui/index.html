@@ -84,6 +84,21 @@
             <!-- Status Indicator -->
             <div id="statusIndicator" class="status-dot status-ready" title="System ready"></div>
 
+            <!-- Skills button -->
+            <button id="toggleSkills" class="icon-btn" title="Skills">
+                ✨
+            </button>
+
+            <!-- Working Memory button -->
+            <button id="toggleMemory" class="icon-btn" title="Working Memory">
+                🧠
+            </button>
+
+            <!-- Capabilities button -->
+            <button id="toggleCapabilities" class="icon-btn" title="Runtime Capabilities">
+                🧩
+            </button>
+
             <!-- Telemetry (optional, toggleable) -->
             <button id="toggleTelemetry" class="icon-btn" title="Toggle telemetry">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -161,6 +176,9 @@
         </div>
     </div>
 
+    <!-- ── Skill Suggestion Bar (appears above chat contextually) -->
+    <div id="skillSuggestionBar" class="skill-suggestion-bar hidden"></div>
+
     <!-- ── Chat Area ────────────────────────────────────────── -->
     <main id="chatArea" class="chat-area">
         <!-- Welcome Screen -->
@@ -225,6 +243,20 @@
     <!-- ── Input Area ───────────────────────────────────────── -->
     <footer id="inputArea" class="input-area">
         <div class="input-wrapper">
+
+            <!-- Active Skill Pill (shown when a skill is active) -->
+            <div id="activeSkillPill" class="active-skill-pill hidden">
+                <span id="activeSkillIcon" class="active-skill-icon">✨</span>
+                <span id="activeSkillName" class="active-skill-name">Skill</span>
+                <span class="active-skill-label">Active</span>
+                <button id="deactivateSkillBtn" class="active-skill-deactivate" title="Deactivate skill">×</button>
+            </div>
+
+            <!-- Hidden skill select (programmatically driven; preserved for X-Skill header logic) -->
+            <select id="skillSelect" style="display:none;" aria-hidden="true">
+                <option value="none">none</option>
+            </select>
+
             <div id="inputContainer" class="input-container">
                 <!-- Doc chips (archivos cargados) -->
                 <div id="docChips" style="display:none; flex-wrap:wrap; gap:0.35em; padding:0.5em 0.75em 0 0.75em;"></div>
@@ -276,8 +308,69 @@
         </div>
     </footer>
 
-    <script src="/static/document_ui.js"></script>
-    <script src="/static/app.js"></script>
+    <!-- ── Skills Drawer (viewport-fixed, independent of chat layout) -->
+    <div id="skillsDrawer" class="skills-drawer hidden">
+        <div class="drawer-overlay" id="skillsOverlay"></div>
+        <div class="skills-drawer-content">
+            <div class="drawer-header">
+                <div class="flex items-center gap-2">
+                    <span class="text-lg">✨</span>
+                    <h2 class="text-sm font-semibold tracking-wide text-surface-200">Skills</h2>
+                    <span class="text-[10px] text-surface-200/30 font-normal ml-1">AI Assistants</span>
+                </div>
+                <button id="closeSkills" class="icon-btn" title="Close skills" style="font-size: 1.25rem;">
+                    &times;
+                </button>
+            </div>
+            <div class="skills-drawer-body" id="skillsList">
+                <div class="loading-spinner">Loading skills...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Capabilities Drawer (viewport-fixed, independent of chat layout) -->
+    <div id="capabilitiesDrawer" class="capabilities-drawer hidden">
+        <div class="drawer-overlay" id="capabilitiesOverlay"></div>
+        <div class="drawer-content">
+            <div class="drawer-header">
+                <div class="flex items-center gap-2">
+                    <span class="text-lg">🧩</span>
+                    <h2 class="text-sm font-semibold tracking-wide text-surface-200">Runtime Capabilities</h2>
+                </div>
+                <button id="closeCapabilities" class="icon-btn" title="Close capabilities" style="font-size: 1.25rem;">
+                    &times;
+                </button>
+            </div>
+            <div class="drawer-body" id="capabilitiesList">
+                <div class="loading-spinner">Loading capabilities...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Working Memory Drawer (viewport-fixed) ──────────────────── -->
+    <div id="memoryDrawer" class="skills-drawer hidden">
+        <div class="drawer-overlay" id="memoryOverlay"></div>
+        <div class="skills-drawer-content">
+            <div class="drawer-header">
+                <div class="flex items-center gap-2">
+                    <span class="text-lg">🧠</span>
+                    <h2 class="text-sm font-semibold tracking-wide text-surface-200">Working Memory</h2>
+                    <span class="text-[10px] text-surface-200/30 font-normal ml-1">Agent State</span>
+                </div>
+                <button id="closeMemory" class="icon-btn" title="Close memory" style="font-size: 1.25rem;">
+                    &times;
+                </button>
+            </div>
+            <div class="skills-drawer-body" id="memoryContent">
+                <div class="loading-spinner">Loading memory...</div>
+            </div>
+        </div>
+    </div>
+    <script src="/static/document_ui.js?v=1.3.0"></script>
+    <script src="/static/capabilities_ui.js?v=1.3.0"></script>
+    <script src="/static/skills_ui.js?v=1.3.0"></script>
+    <script src="/static/memory_ui.js?v=1.0.0"></script>
+    <script src="/static/app.js?v=1.3.0"></script>
 </body>
 
 </html>

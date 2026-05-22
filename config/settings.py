@@ -92,6 +92,86 @@ class Settings(BaseSettings):
         description="System mode: ultra_light, balanced, performance",
     )
 
+    # ── RAG — NotebookLM Pipeline ──────────────────────────────
+    enable_rag_mode: bool = Field(
+        default=False,
+        description="Enable RAG NotebookLM pipeline",
+    )
+
+    # Embedder
+    rag_embedder_model: str = Field(
+        default="BAAI/bge-small-en-v1.5",
+        description="Local embedding model (384-dim, code/tech optimized)",
+    )
+    rag_embedding_dim: int = Field(
+        default=384,
+        description="Embedding dimension",
+    )
+
+    # Chunking
+    rag_chunk_size: int = Field(
+        default=300,
+        description="Chunk size in approx tokens",
+    )
+    rag_chunk_overlap: int = Field(
+        default=50,
+        description="Overlap between consecutive chunks in tokens",
+    )
+
+    # Retrieval
+    rag_top_k: int = Field(
+        default=5,
+        description="Top-k chunks for normal mode",
+    )
+    rag_top_k_thinking: int = Field(
+        default=8,
+        description="Top-k chunks for thinking/deep mode",
+    )
+    rag_retrieval_mode: str = Field(
+        default="hybrid",
+        description="Retrieval strategy: semantic | keyword | hybrid",
+    )
+    rag_hybrid_alpha: float = Field(
+        default=0.7,
+        description="Weight for semantic vs keyword in hybrid (1.0 = pure semantic)",
+    )
+
+    # Capabilities overrides
+    capability_overrides: Dict[str, bool] = Field(
+        default_factory=lambda: {
+            "terminal": False,
+            "web_search": False,
+            "image_generation": False,
+            "voice": False,
+            "vision": False,
+        },
+        description="Consolidated manual overrides to enable/disable capabilities",
+    )
+
+    # Storage
+    uploads_dir: str = Field(
+        default="data/uploads",
+        description="Directory for document uploads",
+    )
+    rag_db_path: str = Field(
+        default="data/rag.db",
+        description="SQLite database path for doc/chunk metadata",
+    )
+    faiss_index_path: str = Field(
+        default="data/embeddings/faiss.index",
+        description="FAISS index file path",
+    )
+
+    # Claude (optional, future)
+    anthropic_api_key: str = Field(
+        default="",
+        description="Anthropic API key for Claude models",
+    )
+    claude_model: str = Field(
+        default="claude-3-5-sonnet-20241022",
+        description="Claude model ID",
+    )
+
     model_config = {
         "env_file": ".env",
         "env_prefix": "ASCODE_",
