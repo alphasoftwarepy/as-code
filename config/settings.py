@@ -135,6 +135,10 @@ class Settings(BaseSettings):
         default=0.7,
         description="Weight for semantic vs keyword in hybrid (1.0 = pure semantic)",
     )
+    rag_session_candidate_pool: int = Field(
+        default=250,
+        description="FAISS candidate pool limit before filtering by session documents",
+    )
 
     # Capabilities overrides
     capability_overrides: Dict[str, bool] = Field(

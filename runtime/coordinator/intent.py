@@ -27,6 +27,16 @@ KEYWORD_MAPS: Dict[str, List[str]] = {
     "content_creator": [
         "video", "guión", "script", "post", "blog", "content", "creador", "diseño", "flyer", "imagen",
         "youtube", "tiktok", "copywriting", "redactar", "escribir", "podcast", "thumbnail", "contenido"
+    ],
+    "programming": [
+        "código", "code", "programar", "programación", "bug", "error", "debug", "debuggear",
+        "función", "función", "function", "clase", "class", "módulo", "module", "api",
+        "implementar", "implement", "refactor", "arquitectura", "architecture", "algoritmo",
+        "algorithm", "python", "javascript", "typescript", "sql", "html", "css", "json",
+        "endpoint", "backend", "frontend", "test", "unittest", "git", "deploy", "runtime",
+        "desarrollar", "desarrollo", "desarrollador", "coding", "scripting", "script", "scripts",
+        "base de datos", "database", "server", "fastapi", "compilar", "compiler", "pyproject.toml",
+        "requirements.txt", "package.json", "npm", "pip", "docker", "github", "repo", "repository"
     ]
 }
 
@@ -38,6 +48,9 @@ def analyze_intent(user_message: str, db: Session, session_id: str) -> List[str]
     scores: Dict[str, int] = {skill: 0 for skill in KEYWORD_MAPS}
     msg_lower = user_message.lower()
 
+    # Track skills with explicit keyword matches in the user message (User Intent Gate)
+    message_matched_skills = set()
+
     # 1. Match against user message
     for skill, keywords in KEYWORD_MAPS.items():
         for kw in keywords:
@@ -46,27 +59,41 @@ def analyze_intent(user_message: str, db: Session, session_id: str) -> List[str]
             matches = len(re.findall(pattern, msg_lower))
             if matches > 0:
                 scores[skill] += matches * 2
+                message_matched_skills.add(skill)
 
-    # 2. Match against active RAG documents
+    # User Intent Gate: If no skill keyword matches the user message, it is a neutral/general query.
+    # Return immediately to avoid specialized skill pollution from documents/observations.
+    if not message_matched_skills:
+        import logging
+        logging.getLogger("as-code.runtime.coordinator.intent").info(
+            f"[SKILL-TRACE] analyze_intent (neutral query gated): msg='{user_message}' -> matched_skills=[]"
+        )
+        return []
+
+    # 2. Match against active RAG documents (contextual boost, only for message-matched skills)
     try:
-        docs = db.query(RAGDocument).all()
+        # Enforce Active Retrieval Scope (Phase 3.6) by filtering by session_id
+        docs = db.query(RAGDocument).filter_by(session_id=session_id).all()
         for doc in docs:
             filename_lower = doc.filename.lower()
-            for skill, keywords in KEYWORD_MAPS.items():
-                for kw in keywords:
-                    if kw in filename_lower:
+            # Clean filename by replacing hyphens, underscores, dots, etc. with space for boundary search
+            filename_clean = re.sub(r'[^a-zA-Z0-9áéíóúüñ]', ' ', filename_lower)
+            for skill in message_matched_skills:
+                for kw in KEYWORD_MAPS[skill]:
+                    pattern = r'\b' + re.escape(kw) + r'\b'
+                    if re.search(pattern, filename_clean):
                         scores[skill] += 3
     except Exception:
         # Graceful degradation if RAG table is missing or errors
         pass
 
-    # 3. Match against recent observations in Working Memory
+    # 3. Match against recent observations in Working Memory (contextual boost, only for message-matched skills)
     try:
         observations = db.query(MemoryObservation).filter_by(session_id=session_id).all()
         for obs in observations:
             obs_lower = obs.content.lower()
-            for skill, keywords in KEYWORD_MAPS.items():
-                for kw in keywords:
+            for skill in message_matched_skills:
+                for kw in KEYWORD_MAPS[skill]:
                     pattern = r'\b' + re.escape(kw) + r'\b'
                     if re.search(pattern, obs_lower):
                         scores[skill] += 1
@@ -74,6 +101,12 @@ def analyze_intent(user_message: str, db: Session, session_id: str) -> List[str]
         pass
 
     # Return matching skills with score > 0, sorted descending
-    matched = [skill for skill, score in scores.items() if score > 0]
+    matched = [skill for skill in message_matched_skills if scores[skill] > 0]
     matched.sort(key=lambda s: scores[s], reverse=True)
+
+    import logging
+    logging.getLogger("as-code.runtime.coordinator.intent").info(
+        f"[SKILL-TRACE] analyze_intent: msg='{user_message}' -> matched_skills={matched} (scores={scores})"
+    )
+
     return matched

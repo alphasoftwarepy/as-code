@@ -7,6 +7,9 @@ from runtime.coordinator.intent import analyze_intent
 from runtime.coordinator.workflow import load_workflow_state, update_workflow, process_task_progression, predict_next_workflow_state
 from runtime.coordinator.suggestions import get_suggested_skills
 from runtime.coordinator.continuity_resolver import DeterministicContinuityResolver
+from runtime.coordinator.prompts import resolve_root_prompt
+from runtime.coordinator.workflow_continuation import WorkflowContinuationResolver
+
 
 logger = logging.getLogger("as-code.runtime.coordinator")
 
@@ -50,9 +53,18 @@ class RuntimeCoordinator:
         
         resolved_skill = manual_skill
         if not resolved_skill:
-            resolved_skill = current_state.active_skill
-        if not resolved_skill:
-            resolved_skill = first_inferred
+            if first_inferred:
+                resolved_skill = first_inferred
+            elif current_state.active_skill:
+                wf_resolver = WorkflowContinuationResolver()
+                if wf_resolver.resolve(
+                    user_message=user_message,
+                    current_state=current_state,
+                    inferred_skill=first_inferred,
+                    manual_skill=manual_skill,
+                    session_id=session_id,
+                ):
+                    resolved_skill = current_state.active_skill
 
         # 5. Update workflow state transitions
         workflow_state = update_workflow(db, session_id, user_message, resolved_skill)
@@ -120,19 +132,28 @@ class RuntimeCoordinator:
 
     def build_runtime_context_block(self, state: WorkflowState, active_skill: Optional[str]) -> str:
         """Build the runtime context block to inject into the system prompt."""
-        if not state.objective and not state.current_phase and not active_skill:
-            return ""
-
         lines = ["## RUNTIME CONTEXT"]
+
+        # Only inject objective if it was explicitly declared by the user (not a generic heuristic)
         if state.objective:
-            lines.append(f"Active objective: {state.objective}")
-        if state.current_phase:
-            lines.append(f"Current phase: {state.current_phase}")
-        if state.current_focus:
-            lines.append(f"Current focus: {state.current_focus}")
+            is_generic = (
+                state.objective == f"Resolve {active_skill} task"
+                or state.objective == f"Resolve {state.active_skill} task"
+                or "workflow" in state.objective.lower()
+                or state.objective == active_skill
+                or state.objective == state.active_skill
+            )
+            if not is_generic:
+                lines.append(f"Active objective: {state.objective}")
+
+        # current_phase / current_focus are excluded by default to avoid prompt pollution
+
         if active_skill:
             lines.append(f"Active skill: {active_skill}")
-        
+
+        if len(lines) <= 1:
+            return ""
+
         return "\n".join(lines).strip()
 
 class PureCoordinator:
@@ -157,7 +178,28 @@ class PureCoordinator:
 
         # 2. Resolve skill and workflow state
         current_state = load_workflow_state(db, contract.session_id)
-        resolved_skill = contract.manual_skill or current_state.active_skill or first_inferred
+        resolved_skill = contract.manual_skill
+        if not resolved_skill:
+            if first_inferred:
+                resolved_skill = first_inferred
+            elif current_state.active_skill:
+                wf_resolver = WorkflowContinuationResolver()
+                if wf_resolver.resolve(
+                    user_message=contract.user_message,
+                    current_state=current_state,
+                    inferred_skill=first_inferred,
+                    manual_skill=contract.manual_skill,
+                    session_id=contract.session_id,
+                ):
+                    resolved_skill = current_state.active_skill
+
+        logger.info(
+            f"[SKILL-TRACE] skill resolver: "
+            f"manual={contract.manual_skill}, "
+            f"workflow_active={current_state.active_skill}, "
+            f"inferred={first_inferred} "
+            f"-> resolved={resolved_skill}"
+        )
 
         # 3. Predict next workflow state (pure function)
         predicted_wf = predict_next_workflow_state(contract.user_message, resolved_skill, current_state)
@@ -171,35 +213,17 @@ class PureCoordinator:
         lang = decision.detected_language
         rag_query = decision.final_rag_query
 
-        # 6. Root Prompt
-        if lang == "ES":
-            if contract.model_id == "code":
-                root_prompt = (
-                    "Eres un operador de software. Directo, táctico y orientado a resultados. "
-                    "Escribe código limpio y eficiente."
-                )
-            else:
-                root_prompt = (
-                    "Eres un operador de negocio. Directo, táctico y orientado a resultados.\n"
-                    "Analiza y responde brevemente estructurando la respuesta en estas 3 secciones:\n"
-                    "- DIAGNÓSTICO: [Fallo principal en una frase]\n"
-                    "- ANÁLISIS (Fricción/Valor/Relación): [Fricciones en CTA/proceso, valor/dolor, y confianza/comunicación]\n"
-                    "- ACCIÓN: [Recomendación táctica directa]"
-                )
-        else:
-            if contract.model_id == "code":
-                root_prompt = (
-                    "You are a software operator. Direct, tactical and results-oriented. "
-                    "Write clean, efficient code."
-                )
-            else:
-                root_prompt = (
-                    "You are a business operator. Direct, tactical and results-oriented.\n"
-                    "Analyze and respond briefly by structuring your response into these 3 sections:\n"
-                    "- DIAGNOSIS: [Main failure in one sentence]\n"
-                    "- ANALYSIS (Friction/Value/Relation): [Friction in CTA/process, value/pain, and trust/communication]\n"
-                    "- ACTION: [Direct tactical recommendation]"
-                )
+        # 6. Root Prompt (via Prompt Family resolution)
+        prompt_family = None
+        if resolved_skill and skill_service:
+            manifest = skill_service.get_skill_manifest(resolved_skill)
+            if manifest:
+                prompt_family = manifest.prompt_family
+
+        if contract.model_id == "code" or resolved_skill == "programming":
+            prompt_family = "SOFTWARE_PROMPT"
+
+        root_prompt = resolve_root_prompt(lang, prompt_family)
 
         system_prompt = f"[LANG={lang}]\n{root_prompt}"
 
@@ -208,6 +232,35 @@ class PureCoordinator:
             skill_prompt = skill_service.get_skill_prompt(resolved_skill)
             if skill_prompt:
                 system_prompt = f"{system_prompt}\n\n{skill_prompt}"
+
+        # 7.5 Inject Capability Instructions (Cognitive Prompt for Phase 3.5)
+        if lang == "ES":
+            capability_instructions = (
+                "\n\n### PROTOCOLO DE INVOCACIÓN DE CAPACIDADES\n"
+                "Si necesitas usar una capacidad del sistema local, genera un bloque JSON envuelto en triple acento grave y el identificador 'json_call'. Detén la generación de inmediato tras cerrar el bloque.\n"
+                "Formato:\n"
+                "```json_call\n"
+                "{\n"
+                "  \"capability\": \"<capability_id>\",\n"
+                "  \"action\": \"<action_name>\",\n"
+                "  \"params\": {}\n"
+                "}\n"
+                "```\n"
+            )
+        else:
+            capability_instructions = (
+                "\n\n### CAPABILITY INVOCATION PROTOCOL\n"
+                "If you need to use a local system capability, emit a JSON block wrapped in triple backticks and the 'json_call' identifier. Stop generation immediately after closing the block.\n"
+                "Format:\n"
+                "```json_call\n"
+                "{\n"
+                "  \"capability\": \"<capability_id>\",\n"
+                "  \"action\": \"<action_name>\",\n"
+                "  \"params\": {}\n"
+                "}\n"
+                "```\n"
+            )
+        system_prompt = f"{system_prompt}{capability_instructions}"
 
         # 8. Inject Coordinator context
         runtime_context = self.build_runtime_context_block(predicted_wf, resolved_skill)
@@ -250,6 +303,7 @@ class PureCoordinator:
                     db=db,
                     mode=mode,
                     pipeline=pipeline,
+                    session_id=contract.session_id,
                 )
                 if context:
                     system_prompt = f"{system_prompt}\n\n{context}"
@@ -292,18 +346,27 @@ class PureCoordinator:
         )
 
     def build_runtime_context_block(self, state: WorkflowState, active_skill: Optional[str]) -> str:
-        if not state.objective and not state.current_phase and not active_skill:
-            return ""
-
         lines = ["## RUNTIME CONTEXT"]
+
+        # Only inject objective if it was explicitly declared by the user (not a generic heuristic)
         if state.objective:
-            lines.append(f"Active objective: {state.objective}")
-        if state.current_phase:
-            lines.append(f"Current phase: {state.current_phase}")
-        if state.current_focus:
-            lines.append(f"Current focus: {state.current_focus}")
+            is_generic = (
+                state.objective == f"Resolve {active_skill} task"
+                or state.objective == f"Resolve {state.active_skill} task"
+                or "workflow" in state.objective.lower()
+                or state.objective == active_skill
+                or state.objective == state.active_skill
+            )
+            if not is_generic:
+                lines.append(f"Active objective: {state.objective}")
+
+        # current_phase / current_focus are excluded by default to avoid prompt pollution
+
         if active_skill:
             lines.append(f"Active skill: {active_skill}")
-        
+
+        if len(lines) <= 1:
+            return ""
+
         return "\n".join(lines).strip()
 

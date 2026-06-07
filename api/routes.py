@@ -84,41 +84,26 @@ async def chat_completions(
     is_spanish = len(msg_words & spanish_indicators) >= 2 or any(c in user_message for c in ["¿", "á", "é", "í", "ó", "ú", "ñ"])
     lang = "ES" if is_spanish else "EN"
 
-    if lang == "ES":
-        if model_id == "code":
-            root_prompt = (
-                "Eres un operador de software. Directo, táctico y orientado a resultados. "
-                "Escribe código limpio y eficiente."
-            )
-        else:
-            root_prompt = (
-                "Eres un operador de negocio. Directo, táctico y orientado a resultados.\n"
-                "Analiza y responde brevemente estructurando la respuesta en estas 3 secciones:\n"
-                "- DIAGNÓSTICO: [Fallo principal en una frase]\n"
-                "- ANÁLISIS (Fricción/Valor/Relación): [Fricciones en CTA/proceso, valor/dolor, y confianza/comunicación]\n"
-                "- ACCIÓN: [Recomendación táctica directa]"
-            )
-    else:
-        if model_id == "code":
-            root_prompt = (
-                "You are a software operator. Direct, tactical and results-oriented. "
-                "Write clean, efficient code."
-            )
-        else:
-            root_prompt = (
-                "You are a business operator. Direct, tactical and results-oriented.\n"
-                "Analyze and respond briefly by structuring your response into these 3 sections:\n"
-                "- DIAGNOSIS: [Main failure in one sentence]\n"
-                "- ANALYSIS (Friction/Value/Relation): [Friction in CTA/process, value/pain, and trust/communication]\n"
-                "- ACTION: [Direct tactical recommendation]"
-            )
-
-    # Inject language anchor at POSITION 0
-    system_prompt = f"[LANG={lang}]\n{root_prompt}"
-
     # ── Session / Skill resolution ──────────────────────────────
     session_id = request.headers.get("X-Session-Id", "default_session")
     skill_id = request.headers.get("X-Skill")
+    skill_service = getattr(request.app.state, "skill_service", None)
+
+    # ── Root Prompt Resolution via Prompt Family ──────────────────
+    from runtime.coordinator.prompts import resolve_root_prompt
+    prompt_family = None
+    if skill_id and skill_service:
+        manifest = skill_service.get_skill_manifest(skill_id)
+        if manifest:
+            prompt_family = manifest.prompt_family
+
+    if model_id == "code" or skill_id == "programming":
+        prompt_family = "SOFTWARE_PROMPT"
+
+    root_prompt = resolve_root_prompt(lang, prompt_family)
+
+    # Inject language anchor at POSITION 0
+    system_prompt = f"[LANG={lang}]\n{root_prompt}"
 
     # ── Runtime Contract (Subfase 1A / Continuity) ──────────────
     import time
@@ -147,7 +132,7 @@ async def chat_completions(
         timestamp=time.time(),
         snapshot=snapshot,
         language_confidence_threshold=2,
-        explicit_reset=user_message.lower().startswith('/reset')
+        explicit_reset=any(user_message.lower().startswith(cmd) for cmd in ['/reset', '/clear', '/new'])
     )
     logger.info(f"[HARDENING-CONTRACT] Created RuntimeContract: id={contract.request_id} session={contract.session_id} has_prev={previous_user_message is not None} turn={snapshot.turn_number}")
 
@@ -204,7 +189,7 @@ async def chat_completions(
 
     # Semantic parameter presets (Backend Parameter Ownership)
     PRESETS = {
-        "PRECISE": {"temperature": 0.1, "top_k": 10, "top_p": 0.9, "max_tokens": 2048},
+        "PRECISE": {"temperature": 0.1, "top_k": 10, "top_p": 0.9, "max_tokens": 4096},
         "BALANCED": {"temperature": 0.5, "top_k": 40, "top_p": 0.95, "max_tokens": 4096},
         "CREATIVE": {"temperature": 0.8, "top_k": 50, "top_p": 1.0, "max_tokens": 5120},
     }
@@ -239,6 +224,12 @@ async def chat_completions(
         f"[RUNTIME-PRESET] resolved={preset_name} for inferred_mode={inferred_mode} "
         f"(skill={resolved_skill}, model={model_id})"
     )
+    logger.info(
+        f"[SKILL-TRACE] runtime_preset_resolver: "
+        f"skill={resolved_skill}, model={model_id} "
+        f"-> inferred_mode={inferred_mode} "
+        f"-> preset_name={preset_name}"
+    )
 
     # Apply preset parameters
     temp = preset["temperature"]
@@ -260,9 +251,17 @@ async def chat_completions(
         request_id=request_id,
     )
 
+    from runtime.coordinator.agent import AgentControlRunner
+    agent_runner = AgentControlRunner(engine)
+
     if body.stream:
-        # Streaming response (SSE)
-        result_stream = engine.generate_stream(inference_request)
+        # Streaming response (SSE) via AgentControlRunner
+        result_stream = agent_runner.run_inference_loop_stream(
+            db=db,
+            body=body,
+            inference_request=inference_request,
+            app_state=request.app,
+        )
 
         # Apply state mutations post-inference dispatch (Subfase 1D)
         if manifest:
@@ -283,9 +282,14 @@ async def chat_completions(
             },
         )
     else:
-        # Non-streaming response
+        # Non-streaming response via AgentControlRunner
         start = time.perf_counter()
-        result = await engine.generate(inference_request)
+        agent_response = await agent_runner.run_inference_loop(
+            db=db,
+            body=body,
+            inference_request=inference_request,
+            app_state=request.app,
+        )
         elapsed_ms = (time.perf_counter() - start) * 1000
 
         # Apply state mutations post-inference dispatch (Subfase 1D)
@@ -296,24 +300,8 @@ async def chat_completions(
             except Exception as mut_err:
                 logger.warning(f"Failed to apply state mutations in non-streaming flow: {mut_err}")
 
-        return ChatCompletionResponse(
-            id=f"chatcmpl-{uuid.uuid4().hex[:12]}",
-            model=model_id,
-            choices=[
-                ChatCompletionChoice(
-                    message=ChatMessage(role="assistant", content=result.text),
-                    finish_reason=result.finish_reason or "stop",
-                )
-            ],
-            usage=UsageInfo(
-                prompt_tokens=result.prompt_tokens,
-                completion_tokens=result.tokens_generated,
-                total_tokens=result.prompt_tokens + result.tokens_generated,
-            ),
-            provider=result.provider_type,
-            tokens_per_sec=result.tokens_per_sec,
-            latency_ms=elapsed_ms,
-        )
+        agent_response.latency_ms = elapsed_ms
+        return agent_response
 
 
 # ── GET /v1/models ─────────────────────────────────────────────

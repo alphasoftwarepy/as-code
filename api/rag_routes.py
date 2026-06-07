@@ -65,6 +65,7 @@ async def upload_rag_document(
     request: Request,
     file: UploadFile = File(...),
     pipeline: str = "chat",        # "chat" | "code"
+    session_id: Optional[str] = None, # Scope for session-exclusive RAG
     db: Optional[Session] = Depends(get_db),
 ):
     """
@@ -93,7 +94,7 @@ async def upload_rag_document(
 
     logger.info(
         f"[RAG-UPLOAD] file={file.filename!r} | "
-        f"size_bytes={len(content)} | pipeline={pipeline}"
+        f"size_bytes={len(content)} | pipeline={pipeline} | session_id={session_id}"
     )
 
     # Parse text
@@ -114,6 +115,7 @@ async def upload_rag_document(
         content=parsed.text,
         source="local",
         pipeline=pipeline,
+        session_id=session_id,
     )
     db.add(doc)
     db.commit()
@@ -165,10 +167,16 @@ async def upload_rag_document(
 
 
 @rag_router.get("/documents", summary="List all RAG documents")
-def list_rag_documents(db: Optional[Session] = Depends(get_db)):
-    """Return all uploaded documents with chunk counts."""
+def list_rag_documents(
+    session_id: Optional[str] = None,
+    db: Optional[Session] = Depends(get_db),
+):
+    """Return all uploaded documents with chunk counts, optionally filtered by session."""
     db = _require_db(db)
-    docs = db.query(RAGDocument).order_by(RAGDocument.created_at.desc()).all()
+    query = db.query(RAGDocument)
+    if session_id is not None:
+        query = query.filter(RAGDocument.session_id == session_id)
+    docs = query.order_by(RAGDocument.created_at.desc()).all()
     return {
         "count": len(docs),
         "documents": [d.to_dict() for d in docs],

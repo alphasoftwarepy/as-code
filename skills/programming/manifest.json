@@ -1,0 +1,11 @@
+{
+  "id": "programming",
+  "name": "Programming Assistant",
+  "description": "Code generation, debugging, architecture and technical implementation",
+  "required_scopes": [
+    "documents.read",
+    "rag.retrieve"
+  ],
+  "enabled": true,
+  "prompt_family": "SOFTWARE_PROMPT"
+}

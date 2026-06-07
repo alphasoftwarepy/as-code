@@ -14,6 +14,11 @@ server:
   port: 8000
   log_level: "INFO"
 
+# file: "models/gemma/gemma-3n-E2B-it-int4.litertlm"
+# params_billions: 2.0
+# estimated_vram_mb: 1500
+# quantization: "int4"
+
 # Model definitions
 models:
   chat:
@@ -31,6 +36,7 @@ models:
       - brainstorming
       - explanations
     source: "https://huggingface.co/litert-community/gemma-3n-E2B-it-litert-lm"
+  
   code:
     id: "gemma-code"
     file: "models/gemma/gemma-3n-E2B-it-int4.litertlm"
@@ -47,12 +53,12 @@ models:
 
   reasoning:
     id: "gemma-reasoning"
-    file: "models/gemma/gemma-3n-E2B-it-int4.litertlm"
+    file: "models/gemma/gemma-4-E4B-it.litertlm"
     type: "reasoning"
     provider: "litert_cli"
-    params_billions: 2.0
-    estimated_vram_mb: 1500
-    quantization: "int4"
+    params_billions: 4.0
+    estimated_vram_mb: 4000
+    quantization: "int8"
     capabilities:
       - architecture
       - analysis

@@ -33,6 +33,7 @@ class RAGDocument(Base):
     content = Column(Text, nullable=False)        # Full extracted text
     source = Column(String, default="local")      # local|web
     pipeline = Column(String, default="chat")     # chat|code
+    session_id = Column(String, index=True, nullable=True) # Scope for session-exclusive RAG
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
@@ -52,6 +53,7 @@ class RAGDocument(Base):
             "file_type": self.file_type,
             "source": self.source,
             "pipeline": self.pipeline,
+            "session_id": self.session_id,
             "created_at": self.created_at.isoformat(),
             "chunk_count": chunk_count,
             # Derived ingest state — no extra DB column needed:

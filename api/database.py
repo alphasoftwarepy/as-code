@@ -40,6 +40,18 @@ def init_db(db_path: str = "data/rag.db") -> None:
     Base.metadata.create_all(bind=_engine)
     MemoryBase.metadata.create_all(bind=_engine)
 
+    # Simple column migration for session_id
+    from sqlalchemy import text
+    with _engine.connect() as conn:
+        try:
+            conn.execute(text("ALTER TABLE rag_documents ADD COLUMN session_id TEXT"))
+            if hasattr(conn, "commit"):
+                conn.commit()
+            logger.info("Migrated SQLite: added session_id column to rag_documents table")
+        except Exception:
+            # Column already exists, or table doesn't exist yet
+            pass
+
     logger.info(f"RAG database initialized: {db_path}")
 
 

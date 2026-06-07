@@ -51,7 +51,8 @@ async function uploadDocument(file) {
     }
 
     try {
-        const res = await fetch('/api/rag/documents/upload', {
+        const sessionId = window.memoryUI ? window.memoryUI.getSessionId() : '';
+        const res = await fetch(`/api/rag/documents/upload?session_id=${encodeURIComponent(sessionId)}`, {
             method: 'POST',
             body: formData,
         });
@@ -88,7 +89,8 @@ async function uploadDocument(file) {
 // ── Chips ───────────────────────────────────────────────────────
 async function refreshDocumentList() {
     try {
-        const res = await fetch('/api/rag/documents');
+        const sessionId = window.memoryUI ? window.memoryUI.getSessionId() : '';
+        const res = await fetch(`/api/rag/documents?session_id=${encodeURIComponent(sessionId)}`);
         if (!res.ok) return;
         const data = await res.json();
 
@@ -224,7 +226,7 @@ function setupDocumentUpload() {
         e.preventDefault();
         container.style.boxShadow = '';
         for (const file of e.dataTransfer.files) {
-            if (file.name.match(/\.(txt|pdf|docx)$/i)) {
+            if (file.name.match(/\.(txt|pdf|docx|xlsx|xlsm)$/i)) {
                 await uploadDocument(file);
             }
         }
@@ -266,6 +268,9 @@ function showToast(message, type = 'info') {
     `;
     document.head.appendChild(style);
 })();
+
+// Expose refreshDocumentList globally
+window.refreshDocumentList = refreshDocumentList;
 
 // ── Init ─────────────────────────────────────────────────────────
 setupDocumentUpload();

@@ -18,8 +18,9 @@ from pydantic import BaseModel, Field
 
 class ChatMessage(BaseModel):
     """A single message in a chat conversation."""
-    role: Literal["system", "user", "assistant"] = "user"
+    role: Literal["system", "user", "assistant", "tool"] = "user"
     content: str = ""
+    name: Optional[str] = None
 
 
 class ChatCompletionRequest(BaseModel):
@@ -63,6 +64,8 @@ class ChatCompletionRequest(BaseModel):
                 parts.append(f"User: {msg.content}")
             elif msg.role == "assistant":
                 parts.append(f"Assistant: {msg.content}")
+            elif msg.role == "tool":
+                parts.append(f"Tool Output ({msg.name or 'unknown'}): {msg.content}")
         parts.append("Assistant:")
         return "\n\n".join(parts)
 

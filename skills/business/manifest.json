@@ -6,5 +6,6 @@
     "documents.read",
     "rag.retrieve"
   ],
-  "enabled": true
+  "enabled": true,
+  "prompt_family": "BUSINESS_PROMPT"
 }

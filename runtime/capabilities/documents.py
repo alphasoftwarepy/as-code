@@ -5,14 +5,14 @@ from runtime.capabilities.models import CapabilityStatus
 class DocumentsCapability(BaseCapability):
     id = "documents"
     name = "Document Parsing"
-    description = "Extract and parse plain text, PDF, and DOCX files"
+    description = "Extract and parse plain text, PDF, DOCX, and XLSX/XLSM files"
     category = "documents"
     version = "1.0.0"
     scopes = ["documents.read", "documents.write"]
 
     def check(self, settings, app_state=None) -> CapabilityStatus:
         missing = []
-        for pkg in ["pypdf", "docx"]:
+        for pkg in ["pypdf", "docx", "openpyxl"]:
             try:
                 importlib.import_module(pkg)
             except ImportError:
@@ -38,8 +38,16 @@ class DocumentsCapability(BaseCapability):
             version=self.version,
             available=available,
             enabled=enabled,
-            provider="python-docx/pypdf",
+            provider="python-docx/pypdf/openpyxl",
             status="healthy" if available else "offline",
             reason=reason,
             scopes=self.scopes
         )
+
+    async def execute(self, action: str, params: dict) -> dict:
+        return {
+            "success": True,
+            "capability": self.id,
+            "action": action,
+            "output": f"[Placeholder: {self.name} executed action '{action}' with params: {params}]"
+        }

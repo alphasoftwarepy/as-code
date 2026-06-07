@@ -45,10 +45,8 @@ def get_suggested_skills(
     # Priority 3: Default fallback suggestions if no matches
     if not suggestions:
         # Suggest top available compatible skills
-        for default_skill in ["marketing", "sales", "business", "legal", "content_creator"]:
+        for default_skill in ["programming", "business", "marketing", "sales", "legal", "content_creator"]:
             if default_skill in compatible_skills and default_skill != workflow_state.active_skill:
                 suggestions.append(default_skill)
-                if len(suggestions) >= 2:
-                    break
 
     return suggestions[:3]  # Return max 3 recommendations

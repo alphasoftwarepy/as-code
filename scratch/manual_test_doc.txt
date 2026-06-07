@@ -1,0 +1,4 @@
+This is a manual test document.
+It contains some mock data about user preferences.
+The user prefers a dark theme and quick responses.
+Useful for checking session isolation in retrieval.

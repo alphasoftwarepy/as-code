@@ -25,7 +25,7 @@ Current focus (Phase 3.5):
 *   **Browser-First UI:** Premium, minimal browser interface with direct document drop zone.
 *   **OpenAI-Compatible API:** Serve as a backend for VS Code extensions (Cline, Continue, etc.).
 *   **RAG NotebookLM (RAG v2):** Multi-stage local pipeline: parses, chunks (AST-aware), generates local embeddings, stores metadata in SQLite + vectors in FAISS, and executes hybrid retrieval.
-*   **Working Memory Layer (Phase 2):** Persistent, session-aware short-term memory (variables, prioritizable tasks, observation provenance tracking) injected dynamically at the SYSTEM level.
+*   **Working Memory Layer (Phase 2):** Persistent, session-aware short-term memory (variables, prioritizable tasks, observation provenance tracking) injected dynamically at the SYSTEM level. Fully isolated via dynamic session IDs, reset triggers, and cross-skill variable cleanup.
 *   **Structured Context Builder:** Composes retrieval context dynamically by grouping chunks under `## CONTEXT FROM DOCUMENTS` by file and section.
 *   **Low-Overhead Hot-Swapping:** Intelligent model loading and idle timeout unloads.
 
@@ -95,6 +95,7 @@ The full dependency list is in `requirements.txt`. Key packages:
 | `pydantic`, `pydantic-settings` | Config & models |
 | `pypdf` | PDF parsing (document upload) |
 | `python-docx` | DOCX parsing (document upload) |
+| `openpyxl` | Excel parsing (document upload) |
 | `psutil` | System monitoring |
 | `pyyaml` | Config file parsing |
 | `httpx` | HTTP client |
@@ -149,6 +150,7 @@ AS Code supports uploading documents to chat with their contents. This works ent
 - **TXT** — plain text files
 - **PDF** — text-based PDFs (not scanned images)
 - **DOCX** — Microsoft Word documents
+- **XLSX / XLSM** — Excel spreadsheet files (formatted into Markdown tables)
 
 ### How to use
 1. Open the browser UI at `http://localhost:8000`

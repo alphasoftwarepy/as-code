@@ -16,3 +16,14 @@ class BaseCapability:
             app_state: FastAPI app state (optional, for checking active services).
         """
         raise NotImplementedError
+
+    async def execute(self, action: str, params: dict) -> dict:
+        """Execute the requested capability action.
+        Returns:
+            dict: A structured envelope containing:
+                - success: bool
+                - capability: str
+                - action: str
+                - output: str
+        """
+        raise NotImplementedError

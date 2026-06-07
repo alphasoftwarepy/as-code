@@ -163,9 +163,11 @@ class BaseRAGPipeline:
         top_k: Optional[int] = None,
         mode: str = "hybrid",
         alpha: float = 0.7,
+        session_id: Optional[str] = None,
     ) -> List[RetrievedChunk]:
         """
         Hybrid retrieval: semantic (FAISS) + keyword (BM25) → fused scores.
+        Filtered strictly to documents belonging to the current session.
 
         Args:
             query:  User query string.
@@ -173,13 +175,42 @@ class BaseRAGPipeline:
             top_k:  Number of final chunks to return.
             mode:   "semantic" | "keyword" | "hybrid"
             alpha:  Blend weight — 1.0 = pure semantic, 0.0 = pure keyword.
+            session_id: Active conversational session ID.
 
         Returns:
             List of RetrievedChunk sorted by fused score descending.
         """
         import time
+        from config.settings import get_settings
+        from api.rag_models import RAGDocument, RAGDocumentChunk
+
         start_retrieve = time.perf_counter()
         k = top_k or self.DEFAULT_TOP_K
+
+        # Sessionless Retrieval Rule
+        if session_id is None:
+            logger.info("[RAG-SCOPE] session_id=None | documents=0 | RAG=OFF")
+            return []
+
+        # Find documents matching session_id
+        session_docs = db.query(RAGDocument).filter(RAGDocument.session_id == session_id).all()
+        doc_count = len(session_docs)
+        if doc_count == 0:
+            logger.info(f"[RAG-SCOPE] session_id={session_id} | documents=0 | RAG=OFF")
+            return []
+
+        # Collect chunk IDs for this session's documents
+        session_doc_ids = [d.id for d in session_docs]
+        session_chunks = db.query(RAGDocumentChunk).filter(RAGDocumentChunk.document_id.in_(session_doc_ids)).all()
+        if not session_chunks:
+            logger.info(f"[RAG-SCOPE] session_id={session_id} | documents={doc_count} | chunks=0 | RAG=OFF")
+            return []
+
+        session_chunk_ids = {c.id for c in session_chunks}
+
+        # Candidate pool size configuration
+        settings = get_settings()
+        candidate_pool = getattr(settings, "rag_session_candidate_pool", 250)
 
         # ─ Semantic retrieval ─
         semantic_hits: dict[str, float] = {}
@@ -188,14 +219,18 @@ class BaseRAGPipeline:
             start_embed = time.perf_counter()
             q_emb = self.embedder.embed_query(query)
             embedding_time_ms = (time.perf_counter() - start_embed) * 1000
-            sem_results = self.vector_store.search(q_emb, k=k * 2)
-            semantic_hits = {cid: score for cid, score in sem_results}
+            
+            # Search candidate pool
+            sem_results = self.vector_store.search(q_emb, k=candidate_pool)
+            
+            # Filter hits to keep only those belonging to this session
+            semantic_hits = {cid: score for cid, score in sem_results if cid in session_chunk_ids}
 
         # ─ Keyword retrieval ─
         keyword_hits: dict[str, float] = {}
         if mode in ("keyword", "hybrid"):
-            all_chunks = db.query(RAGDocumentChunk).all()
-            bm25 = BM25Index(all_chunks)
+            # Build BM25 index exclusively with the session chunks
+            bm25 = BM25Index(session_chunks)
             kw_results = bm25.search(query, k=k * 2)
             keyword_hits = {cid: score for cid, score in kw_results}
 
@@ -211,6 +246,13 @@ class BaseRAGPipeline:
         top_ids = sorted(fused, key=lambda x: fused[x], reverse=True)[:k]
 
         retrieval_time_ms = (time.perf_counter() - start_retrieve) * 1000
+
+        # Structured logging
+        logger.info(
+            f"[RAG-SCOPE] session_id={session_id} | documents={doc_count} | "
+            f"candidate_pool={candidate_pool} | filtered_hits={len(fused)} | "
+            f"final_hits={len(top_ids)}"
+        )
 
         logger.info(
             f"[RAG-RETRIEVE] query={query!r} | pipeline={self.PIPELINE_NAME} | mode={mode} | "
@@ -268,6 +310,7 @@ class BaseRAGPipeline:
         top_k: Optional[int] = None,
         retrieval_mode: str = "hybrid",
         alpha: float = 0.7,
+        session_id: Optional[str] = None,
     ) -> str:
         """
         Full pipeline: retrieve → group → compose.
@@ -278,13 +321,28 @@ class BaseRAGPipeline:
         deep = mode == "thinking"
         k = top_k or (self.DEFAULT_TOP_K_DEEP if deep else self.DEFAULT_TOP_K)
 
-        chunks = self.retrieve(query, db, top_k=k, mode=retrieval_mode, alpha=alpha)
+        chunks = self.retrieve(query, db, top_k=k, mode=retrieval_mode, alpha=alpha, session_id=session_id)
+        
+        doc_count = 0
+        if session_id:
+            from api.rag_models import RAGDocument
+            doc_count = db.query(RAGDocument).filter(RAGDocument.session_id == session_id).count()
+
         if not chunks:
+            logger.info(
+                f"[RAG-SCOPE-STATS] session_documents={doc_count} | retrieved_chunks=0 | context_chars=0"
+            )
             return ""
 
         start_compose = time.perf_counter()
         context = self.context_builder.build(chunks, mode=mode, query=query)
         composition_time_ms = (time.perf_counter() - start_compose) * 1000
+
+        # Log Scope Stats
+        logger.info(
+            f"[RAG-SCOPE-STATS] session_documents={doc_count} | "
+            f"retrieved_chunks={len(chunks)} | context_chars={len(context)}"
+        )
 
         logger.info(
             f"[RAG-COMPOSE] composition_time_ms={composition_time_ms:.2f} | "
@@ -334,6 +392,7 @@ class CodeRAGPipeline(BaseRAGPipeline):
         top_k: Optional[int] = None,
         retrieval_mode: str = "hybrid",
         alpha: float = 0.65,     # slightly more keyword weight for symbol names
+        session_id: Optional[str] = None,
     ) -> str:
         return super().build_context(
             query=query,
@@ -342,6 +401,7 @@ class CodeRAGPipeline(BaseRAGPipeline):
             top_k=top_k,
             retrieval_mode=retrieval_mode,
             alpha=alpha,
+            session_id=session_id,
         )
 
 
@@ -383,6 +443,7 @@ class RAGService:
         mode: str = "normal",
         pipeline: str = "chat",
         top_k: Optional[int] = None,
+        session_id: Optional[str] = None,
     ) -> str:
         """Build NotebookLM-style context for a query."""
         p = self._select_pipeline(pipeline)
@@ -393,6 +454,7 @@ class RAGService:
             top_k=top_k,
             retrieval_mode=self.retrieval_mode,
             alpha=self.hybrid_alpha,
+            session_id=session_id,
         )
 
     def retrieve(
@@ -401,6 +463,7 @@ class RAGService:
         db: Session,
         top_k: int = 5,
         pipeline: str = "chat",
+        session_id: Optional[str] = None,
     ) -> List[RetrievedChunk]:
         """Raw retrieval without context composition (for testing/debug)."""
         p = self._select_pipeline(pipeline)
@@ -410,6 +473,7 @@ class RAGService:
             top_k=top_k,
             mode=self.retrieval_mode,
             alpha=self.hybrid_alpha,
+            session_id=session_id,
         )
 
 

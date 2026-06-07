@@ -19,6 +19,11 @@ class RuntimeStateMutator:
         try:
             logger.info(f"[MUTATOR] Starting post-inference state mutations for session={session_id} request={contract.request_id}")
             
+            if contract.explicit_reset:
+                from runtime.memory.manager import WorkingMemoryManager
+                WorkingMemoryManager().reset(db, session_id)
+                logger.info(f"[MUTATOR] Explicit reset applied — cleared session={session_id}")
+            
             # 1. Enforce Memory Limits
             RuntimeStateMutator.enforce_memory_limits(db, session_id)
             

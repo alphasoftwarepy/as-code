@@ -57,6 +57,13 @@ class SkillLoader:
             return skill[1]
         return None
 
+    def get_skill_manifest(self, skill_id: str) -> Optional[SkillManifest]:
+        """Retrieve the manifest for a specific skill if registered."""
+        skill = self.skills.get(skill_id)
+        if skill:
+            return skill[0]
+        return None
+
     def evaluate_skills(self, settings, app_state=None) -> Dict[str, SkillStatus]:
         """Verify compatibility of loaded skills against dynamic capabilities."""
         registry = get_capability_registry()

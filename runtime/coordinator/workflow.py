@@ -11,7 +11,8 @@ PHASES_BY_SKILL = {
     "business": ["planning", "pricing", "operations"],
     "legal": ["review", "risk", "explanation"],
     "sales": ["pipeline", "pricing", "deal_close"],
-    "content_creator": ["scripting", "editing", "publishing"]
+    "content_creator": ["scripting", "editing", "publishing"],
+    "programming": ["analysis", "implementation", "debugging"]
 }
 
 def load_workflow_state(db: Session, session_id: str) -> WorkflowState:
@@ -62,6 +63,11 @@ def predict_next_workflow_state(
     # or if we are switching skills.
     active_skill = state.active_skill or inferred_skill
     if inferred_skill and inferred_skill != state.active_skill:
+        # Clear previous state to prevent contamination when changing skills
+        state.objective = None
+        state.current_phase = None
+        state.current_focus = None
+        
         active_skill = inferred_skill
         state.active_skill = active_skill
         # Initialize default phase
@@ -75,6 +81,11 @@ def predict_next_workflow_state(
             else:
                 state.objective = f"Resolve {active_skill} task"
         state.current_focus = f"Initializing {active_skill} workflow"
+
+        logger.info(
+            f"[SKILL-TRACE] workflow initializer swapping/initializing: "
+            f"prev={current_state.active_skill} -> new={inferred_skill} (phase={phases[0]} focus='{state.current_focus}')"
+        )
 
     if not active_skill:
         return state
@@ -130,6 +141,15 @@ def predict_next_workflow_state(
         elif current in ["scripting", "editing"] and any(k in msg_lower for k in ["publicar", "subir", "postear", "upload"]):
             state.current_phase = "publishing"
             state.current_focus = "Publishing content"
+
+    elif active_skill == "programming" and phases:
+        # ["analysis", "implementation", "debugging"]
+        if current == "analysis" and any(k in msg_lower for k in ["implementar", "crear", "escribir", "develop", "build"]):
+            state.current_phase = "implementation"
+            state.current_focus = "Implementing the solution"
+        elif current in ["analysis", "implementation"] and any(k in msg_lower for k in ["bug", "error", "falla", "no funciona", "debug", "fix"]):
+            state.current_phase = "debugging"
+            state.current_focus = "Debugging and fixing issues"
 
     return state
 

@@ -160,8 +160,8 @@ class LiteRTCLIProvider(InferenceProvider):
         for model_id, proc in list(self._active_processes.items()):
             try:
                 proc.terminate()
-                await asyncio.wait_for(proc.wait(), timeout=5.0)
-            except (asyncio.TimeoutError, ProcessLookupError):
+                proc.wait(timeout=5.0)
+            except (subprocess.TimeoutExpired, ProcessLookupError):
                 try:
                     proc.kill()
                 except ProcessLookupError:
@@ -189,8 +189,8 @@ class LiteRTCLIProvider(InferenceProvider):
             proc = self._active_processes[model_id]
             try:
                 proc.terminate()
-                await asyncio.wait_for(proc.wait(), timeout=5.0)
-            except (asyncio.TimeoutError, ProcessLookupError):
+                proc.wait(timeout=5.0)
+            except (subprocess.TimeoutExpired, ProcessLookupError):
                 try:
                     proc.kill()
                 except ProcessLookupError:

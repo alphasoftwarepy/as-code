@@ -244,7 +244,8 @@ class WorkingMemoryManager:
         """
         snap = self.get_memory(db, session_id)
 
-        variables = snap["variables"]
+        # Exclude internal workflow variables (starting with 'wf_') from system prompt injection
+        variables = [v for v in snap["variables"] if not v["key"].startswith("wf_")]
         tasks = snap["tasks"]
         observations = snap["observations"]
 

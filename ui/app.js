@@ -24,7 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
         settingsPanel: document.getElementById('settingsPanel'),
         toggleTelemetry: document.getElementById('toggleTelemetry'),
         telemetryBar: document.getElementById('telemetryBar'),
-        
+
         // Telemetry values
         telRam: document.getElementById('telRam'),
         telVram: document.getElementById('telVram'),
@@ -54,7 +54,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Auto-resize textarea
-    elements.messageInput.addEventListener('input', function() {
+    elements.messageInput.addEventListener('input', function () {
         this.style.height = 'auto';
         this.style.height = (this.scrollHeight) + 'px';
         if (this.value === '') {
@@ -74,13 +74,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // Actions
     elements.stopBtn.addEventListener('click', stopGeneration);
     elements.clearBtn.addEventListener('click', clearChat);
-    
+
     // Toggles
     elements.toggleSettings.addEventListener('click', () => {
         elements.settingsPanel.classList.toggle('hidden');
         elements.toggleSettings.classList.toggle('active');
     });
-    
+
     elements.toggleTelemetry.addEventListener('click', () => {
         elements.telemetryBar.classList.toggle('hidden');
         elements.toggleTelemetry.classList.toggle('active');
@@ -123,7 +123,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function handleSend() {
         if (state.isGenerating) return;
-        
+
         const text = elements.messageInput.value.trim();
         if (!text) return;
 
@@ -159,12 +159,12 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.telTps.textContent = '—';
 
         state.abortController = new AbortController();
-        
+
         // Create assistant message bubble
         const msgId = 'msg-' + Date.now();
         const contentNode = appendMessage('assistant', '', msgId);
         contentNode.innerHTML = '<span class="typing-cursor"></span>';
-        
+
         let fullText = '';
         const startTime = performance.now();
         let tokenCount = 0;
@@ -193,6 +193,9 @@ document.addEventListener('DOMContentLoaded', () => {
             })();
         if (activeSkillId) {
             headers['X-Skill'] = activeSkillId;
+        }
+        if (window.memoryUI) {
+            headers['X-Session-Id'] = window.memoryUI.getSessionId();
         }
 
         try {
@@ -227,27 +230,27 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (line.startsWith('data: ')) {
                         const dataStr = line.substring(6).trim();
                         if (dataStr === '[DONE]') continue;
-                        
+
                         try {
                             const data = JSON.parse(dataStr);
                             const delta = data.choices[0]?.delta?.content || '';
-                            
+
                             if (fullText === '') {
                                 contentNode.innerHTML = ''; // Remove typing cursor on first token
                             }
-                            
+
                             if (data.model && !modelUsed) {
                                 modelUsed = data.model;
                                 updateRoutingIndicator(modelUsed);
                                 elements.telModel.textContent = modelUsed;
                                 elements.telProvider.textContent = data.provider || 'litert_cli';
                             }
-                            
+
                             fullText += delta;
-                            
+
                             // Basic token counting heuristic
                             tokenCount += delta.split(/\s+/).filter(x => x).length;
-                            
+
                             // Calculate TPS every ~10 tokens to avoid UI thrashing
                             if (tokenCount % 10 === 0) {
                                 const elapsedSec = (performance.now() - startTime) / 1000;
@@ -255,10 +258,10 @@ document.addEventListener('DOMContentLoaded', () => {
                                     elements.telTps.textContent = (tokenCount / elapsedSec).toFixed(1);
                                 }
                             }
-                            
+
                             contentNode.innerHTML = formatMarkdown(fullText) + '<span class="typing-cursor"></span>';
                             elements.messagesContainer.scrollTop = elements.messagesContainer.scrollHeight;
-                            
+
                         } catch (e) {
                             console.warn('Error parsing SSE chunk:', e, dataStr);
                         }
@@ -276,27 +279,27 @@ document.addEventListener('DOMContentLoaded', () => {
         } finally {
             state.isGenerating = false;
             state.abortController = null;
-            
+
             // Finalize HTML
             contentNode.innerHTML = formatMarkdown(fullText);
-            
+
             // Final TPS
             const elapsedSec = (performance.now() - startTime) / 1000;
             if (elapsedSec > 0) {
                 elements.telTps.textContent = (tokenCount / elapsedSec).toFixed(1);
             }
-            
+
             state.chatHistory.push({ role: 'assistant', content: fullText });
-            
+
             elements.sendBtn.classList.remove('hidden');
             elements.stopBtn.classList.add('hidden');
             elements.statusIndicator.className = 'status-dot status-ready';
-            
+
             // ONLY call /v1/cancel when the user explicitly aborted.
             // Do NOT cancel after successful completion — the stream already ended cleanly.
             if (wasUserAborted && state.currentRequestId) {
                 const modelId = elements.modelSelect.value;
-                fetch(`/v1/cancel?request_id=${state.currentRequestId}&model_id=${modelId}`, { method: 'POST' }).catch(() => {});
+                fetch(`/v1/cancel?request_id=${state.currentRequestId}&model_id=${modelId}`, { method: 'POST' }).catch(() => { });
             }
             state.currentRequestId = null;
         }
@@ -305,17 +308,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function stopGeneration() {
         if (!state.isGenerating) return;
-        
+
         if (state.abortController) {
             state.abortController.abort(); // Cancels fetch
         }
-        
+
         elements.statusIndicator.className = 'status-dot status-ready';
     }
 
     function clearChat() {
         if (state.isGenerating) stopGeneration();
-        
+
         state.chatHistory = [];
         elements.messagesContainer.innerHTML = '';
         elements.messagesContainer.classList.add('hidden');
@@ -323,42 +326,65 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.routingIndicator.classList.add('hidden');
         elements.telModel.textContent = '—';
         elements.telTps.textContent = '—';
+
+        // Reset skills UI state
+        if (window.skillsUI) {
+            window.skillsUI.deactivateSkill();
+            window.skillsUI.dismissedSuggs?.clear();
+            window.skillsUI._hideSuggestionBar();
+        }
+
+        // Generate new session ID to start completely clean
+        const newSessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substring(2, 11);
+        if (window.memoryUI) {
+            window.memoryUI.setSessionId(newSessionId);
+            window.memoryUI.refresh();
+        }
+
+        // Refresh document list to reflect new session ID scope (chips should disappear)
+        if (window.refreshDocumentList) {
+            window.refreshDocumentList();
+        }
+
         elements.messageInput.focus();
     }
+
+    // Expose clearChat globally so document_ui.js can invoke it
+    window.clearChat = clearChat;
 
     function appendMessage(role, text, msgId = null) {
         const div = document.createElement('div');
         div.className = `message message-${role}`;
-        
+
         const inner = document.createElement('div');
         inner.className = 'message-inner';
-        
+
         const avatar = document.createElement('div');
         avatar.className = `message-avatar avatar-${role}`;
         avatar.textContent = role === 'user' ? 'U' : 'AI';
-        
+
         const content = document.createElement('div');
         content.className = 'message-content';
         if (msgId) content.id = msgId;
-        
+
         if (text) {
             content.innerHTML = formatMarkdown(text);
         }
-        
+
         inner.appendChild(avatar);
         inner.appendChild(content);
         div.appendChild(inner);
-        
+
         elements.messagesContainer.appendChild(div);
         elements.messagesContainer.scrollTop = elements.messagesContainer.scrollHeight;
-        
+
         return content;
     }
 
     function updateRoutingIndicator(modelId) {
         elements.routingIndicator.classList.remove('hidden');
         elements.routingIndicator.textContent = modelId;
-        
+
         if (modelId === 'chat') {
             elements.routingIndicator.className = 'routing-indicator routing-reasoning';
         } else if (modelId === 'code') {
@@ -372,27 +398,27 @@ document.addEventListener('DOMContentLoaded', () => {
     // ── Ultra-lightweight Markdown Formatter ──────────────────
     function formatMarkdown(text) {
         if (!text) return '';
-        
+
         // Escape HTML
         let html = text
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;');
-            
+
         // Code blocks: ```language\n code \n```
         html = html.replace(/```([a-z0-9]*)\n([\s\S]*?)```/gi, (match, lang, code) => {
             return `<pre><code class="language-${lang}">${code}</code></pre>`;
         });
-        
+
         // Inline code: `code`
         html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-        
+
         // Bold: **text**
         html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-        
+
         // Line breaks
         html = html.replace(/\n/g, '<br>');
-        
+
         return html;
     }
 
@@ -427,7 +453,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Start polling
     setInterval(pollStatus, 5000);
     pollStatus();
-    
+
     // Initialize Capabilities UI if loaded
     if (window.capabilitiesUI) {
         window.capabilitiesUI.init();
@@ -438,7 +464,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!window.skillsUI) {
         console.warn('[app.js] window.skillsUI not found — ensure /static/skills_ui.js loads before app.js');
     }
-    
+
+    // Generate initial session ID
+    const initialSessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substring(2, 11);
+    if (window.memoryUI) {
+        window.memoryUI.setSessionId(initialSessionId);
+    }
+
     // Initial focus
     elements.messageInput.focus();
 });

@@ -71,6 +71,81 @@ def parse_docx(file_path: str) -> str:
         raise
 
 
+def parse_xlsx(file_path: str) -> str:
+    """Parse .xlsx / .xlsm con openpyxl (preservando formato tabular Markdown)."""
+    try:
+        import openpyxl
+    except ImportError:
+        logger.error("openpyxl no instalado. Instala con: pip install openpyxl")
+        raise
+
+    try:
+        wb = openpyxl.load_workbook(file_path, data_only=True, read_only=True)
+        MAX_ROWS = 500
+        MAX_COLS = 50
+        output_parts = []
+
+        for sheet_name in wb.sheetnames:
+            sheet = wb[sheet_name]
+            rows_data = []
+            truncated = False
+            row_idx = 0
+
+            for row in sheet.iter_rows(values_only=True):
+                if row_idx >= MAX_ROWS:
+                    truncated = True
+                    break
+
+                # Check if row has any non-None value
+                if any(v is not None for v in row):
+                    # Limit columns to MAX_COLS
+                    row_val = row[:MAX_COLS]
+                    row_str_list = []
+                    for v in row_val:
+                        if v is None:
+                            row_str_list.append("")
+                        elif isinstance(v, float):
+                            row_str_list.append(f"{v:.4f}".rstrip('0').rstrip('.'))
+                        else:
+                            row_str_list.append(str(v).strip().replace("\n", " ").replace("|", "\\|"))
+                    rows_data.append(row_str_list)
+                    row_idx += 1
+
+            if not rows_data:
+                continue
+
+            if truncated:
+                logger.warning(
+                    f"Hoja '{sheet_name}' truncada a {MAX_ROWS} filas por límite."
+                )
+
+            # Build markdown table
+            sheet_md = []
+            sheet_md.append(f"### Sheet: {sheet_name}")
+            
+            headers = rows_data[0]
+            headers_cleaned = [h if h != "" else f"Col{i+1}" for i, h in enumerate(headers)]
+            
+            sheet_md.append("| " + " | ".join(headers_cleaned) + " |")
+            sheet_md.append("| " + " | ".join(["---"] * len(headers_cleaned)) + " |")
+            
+            for row in rows_data[1:]:
+                if len(row) < len(headers_cleaned):
+                    row += [""] * (len(headers_cleaned) - len(row))
+                sheet_md.append("| " + " | ".join(row) + " |")
+            
+            if truncated:
+                sheet_md.append(f"\n*Nota: Hoja '{sheet_name}' truncada a {MAX_ROWS} filas.*")
+                
+            output_parts.append("\n".join(sheet_md))
+
+        wb.close()
+        return "\n\n".join(output_parts).strip()
+    except Exception as e:
+        logger.error(f"Error parseando XLSX: {e}")
+        raise
+
+
 def parse_document(file_path: str) -> ParsedDocument:
     """
     Router: detecta tipo y parsea.
@@ -96,6 +171,9 @@ def parse_document(file_path: str) -> ParsedDocument:
     elif suffix in [".docx", ".doc"]:
         text = parse_docx(file_path)
         file_type = "docx"
+    elif suffix in [".xlsx", ".xlsm"]:
+        text = parse_xlsx(file_path)
+        file_type = "xlsx"
     else:
         raise ValueError(f"Formato no soportado: {suffix}")
 

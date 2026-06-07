@@ -51,10 +51,14 @@ Developing the coordinator, deterministic state machines, task auto-progression,
     *   **PureCoordinator**: Stateless prompt assembly engine ensuring zero database writes during the prompt compilation phase.
     *   **RuntimeStateMutator**: Post-inference atomic database mutator separating context rendering from side effects.
     *   **Conversational Continuity (Continuity Fix)**: Pure deterministic `DeterministicContinuityResolver` and `DeterministicLanguageDetector` with `LightweightStateStore`. Resolves follow-up queries using entropy-based non-positional carryover, sticky language detection (preventing language oscillation), and explicit/implicit self-sufficiency triggers.
+    *   **Excel Parsing Support**: Seamless parsing of `.xlsx` and `.xlsm` formats via `openpyxl` into clean, structured Markdown tables, with row and column caps to protect the context window.
+    *   **Skill Suggestions Engine Hardening**: Reordered fallback skills to prioritize `"programming"`, expanded keywords to capture technical intents, and removed the early break limit to allow up to 3 recommendations.
+    *   **Working Memory Prompt Sanitation**: Filtered all internal `"wf_*"` variables from the system prompt block to prevent token bloat, and cleaned up the runtime context block by omitting phase/focus info and generic objectives.
+    *   **Session Isolation & Reset UX**: Prevents workflow and variable contamination across sessions by using dynamic session IDs, resetting client UI state on clear/upload, and purging old objective/phase data when the active skill transitions.
 
 ---
 
-## 🚧 Phase 3.5 — Agent Control Loop & Native Call Parser (Current Focus)
+## ✅ Phase 3.5 — Agent Control Loop & Native Call Parser (Completed)
 
 Developing the decision-making loop and output syntax parsing to allow the unified model to orchestrate its own actions.
 
@@ -64,7 +68,22 @@ Developing the decision-making loop and output syntax parsing to allow the unifi
 
 ---
 
-## 🔮 Phase 4 — Capability Execution (using `capability.execute()`)
+## 
+---
+
+## Phase 3.6 — Intent Routing & Prompt Resolution (Completed)
+
+A cycle of surgical fixes to the intent routing, persona resolution, and workflow instrumentation layers, validated through production logs and automated regression tests.
+
+*   **Session-Scoped RAG (Active Document Context):** RAG retrieval strictly filtered by active `session_id`. Document uploads preserve the current session. RAG is disabled when no documents exist in the session.
+*   **User Intent Gate:** `analyze_intent` returns an empty list immediately when the user message contains no skill-specific keywords. Word-boundary matching (`\b`) blocks sub-word false positives.
+*   **Prompt Family Registry:** New `runtime/coordinator/prompts.py` centralizes all prompt templates under `PROMPT_FAMILIES`. Resolution driven by `prompt_family` in each skill `manifest.json`. No hardcoded skill lists in the coordinator.
+*   **BUSINESS_PROMPT decoupled from analytical structure:** Removed mandatory DIAGNOSTICO / ANALISIS / ACCION sections. Now defines domain identity only, letting the LLM adapt output format to the actual task type.
+*   **WorkflowContinuationResolver (v1_passthrough):** New architectural extension point separating workflow continuity from retrieval continuity. Emits `[WORKFLOW-TRACE]` logs for evidence collection before continuity rules are derived.
+
+> See [`dev-notes/STABLE.md`](dev-notes/STABLE.md) for validated invariants that must not be modified without impact analysis.
+
+🚧 Phase 4 — Capability Execution (using `capability.execute()`) (Next)
 
 Activating capabilities by providing execution primitives directly within capability classes.
 
@@ -85,7 +104,16 @@ Adding user confirmation gates for high-impact or destructive operations.
 
 ---
 
-## 🔮 Phase 6 — IDE / VSCode Integration
+## 🔮 Phase 6 — Workspace, Projects, Chats & Knowledge Isolation
+
+Isolating files, conversations, and context variables by active directories, supporting shared project-level documents and private chat attachments.
+
+*   **Workspace & Session Models:** Database tables to map active projects and group sessions.
+*   **Retrieval Scoping:** Filtering FAISS and BM25 queries to prevent cross-project knowledge contamination.
+
+---
+
+## 🔮 Phase 7 — IDE / VSCode Integration
 
 Exposing the Unified Agent Runtime to external developer editors.
 
@@ -94,8 +122,9 @@ Exposing the Unified Agent Runtime to external developer editors.
 
 ---
 
-## 🔮 Phase 7 — Enterprise, Workspace & Multi-Tenant (Long term)
+## 🔮 FASE EXTRA — Multi-User Sharing, Team VPN & Authentication
 
-*   **Sidebar Conversation History:** Navigation list, conversation naming, and database persistence.
-*   **Secure Authentication:** Secure logins, password hashing (bcrypt), JWT tokens, and user database isolation.
-*   **Production Scaling:** PostgreSQL database support and distributed multi-GPU worker pools.
+Security layer for team servers and shared GPU homelabs over VPN, preventing data leakage.
+
+*   **Secure Authentication:** Secure logins, password hashing (bcrypt), and JWT tokens.
+*   **Private Data Isolation:** Database filters to partition chats and knowledge bases by `user_id`.
