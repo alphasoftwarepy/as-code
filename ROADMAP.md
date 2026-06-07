@@ -1,6 +1,6 @@
-# ROADMAP
+# ROADMAP — AS Core
 
-AS Code is evolving from a local chat server into a **Unified Smart Main Agent Runtime** (Offline-first, modular, and extensible alternative to Claude Code, Cursor, and NotebookLM).
+AS Core is evolving into a local-first cognitive workspace centered around projects, combining memory, documents, context, and execution.
 
 ---
 
@@ -68,10 +68,7 @@ Developing the decision-making loop and output syntax parsing to allow the unifi
 
 ---
 
-## 
----
-
-## Phase 3.6 — Intent Routing & Prompt Resolution (Completed)
+## ✅ Phase 3.6 — Intent Routing & Prompt Resolution (Completed)
 
 A cycle of surgical fixes to the intent routing, persona resolution, and workflow instrumentation layers, validated through production logs and automated regression tests.
 
@@ -81,20 +78,35 @@ A cycle of surgical fixes to the intent routing, persona resolution, and workflo
 *   **BUSINESS_PROMPT decoupled from analytical structure:** Removed mandatory DIAGNOSTICO / ANALISIS / ACCION sections. Now defines domain identity only, letting the LLM adapt output format to the actual task type.
 *   **WorkflowContinuationResolver (v1_passthrough):** New architectural extension point separating workflow continuity from retrieval continuity. Emits `[WORKFLOW-TRACE]` logs for evidence collection before continuity rules are derived.
 
-> See [`dev-notes/STABLE.md`](dev-notes/STABLE.md) for validated invariants that must not be modified without impact analysis.
+> See [`dev-notes/ARQUITECTURA.md`](dev-notes/ARQUITECTURA.md) for validated invariants that must not be modified without impact analysis.
 
-🚧 Phase 4 — Capability Execution (using `capability.execute()`) (Next)
+---
 
-Activating capabilities by providing execution primitives directly within capability classes.
+## 🚧 Phase 4 — Project Layer (Next)
 
-*   **Base Interface Extension:** Adding an async `execute(action, params)` method to `BaseCapability`.
+Establishing the core entity that groups all sessions, documents, and memory states under unified project boundaries.
+
+*   **Project Entity Setup:** Database models and tables to map active projects (`project_id`).
+*   **Project-Scoped Context:** Storing and isolating chats, documents, and variables under their corresponding project.
+*   **Project Memory & Knowledge:** Enabling cross-session variables, permanent facts, and project-level knowledge parameters.
+*   **Multi-Chat Projects:** Grouping multiple conversations under a single active project scope.
+
+---
+
+## 🔮 Phase 5 — Capability Execution
+
+Expanding capabilities by providing execution primitives directly within capability classes for general workflows.
+
+*   **Base Interface Extension:** Extending `BaseCapability` to support async actions.
 *   **Local Terminal Command Runner:** Running shell processes safely, handling outputs, timeouts, and return codes.
-*   **Local Git Interface:** wrapper to fetch diffs, checkout branches, and stage commits.
+*   **Local Filesystem Interface (File processing):** Safely reading, writing, moving, and indexing workspace files for document processing and CRM data generation.
+*   **Git Interface Integration:** Operational capability wrapper to fetch status, diffs, and stage commits.
+*   **Reporting automation:** Execution of background reporting scripts and document analysis workflows.
 *   **Scope Security Boundaries:** Enforcing permission boundaries before letting a skill invoke a capability.
 
 ---
 
-## 🔮 Phase 5 — Human-in-the-Loop (HITL) Queue
+## 🔮 Phase 6 — Human Approval & Governance (HITL)
 
 Adding user confirmation gates for high-impact or destructive operations.
 
@@ -104,27 +116,24 @@ Adding user confirmation gates for high-impact or destructive operations.
 
 ---
 
-## 🔮 Phase 6 — Workspace, Projects, Chats & Knowledge Isolation
+## 🔮 Phase 7 — Workspace Automation
 
-Isolating files, conversations, and context variables by active directories, supporting shared project-level documents and private chat attachments.
-
-*   **Workspace & Session Models:** Database tables to map active projects and group sessions.
-*   **Retrieval Scoping:** Filtering FAISS and BM25 queries to prevent cross-project knowledge contamination.
+Enabling background scheduling, file-watch execution triggers, and batch processing pipelines.
 
 ---
 
-## 🔮 Phase 7 — IDE / VSCode Integration
+## 🔮 Phase 8 — VSCode / Cline Integration
 
-Exposing the Unified Agent Runtime to external developer editors.
+Exposing the Unified Agent Runtime to external developer editors as secondary connectors.
 
 *   **Workspace Sync API:** Syncing working folders, cursor positions, and open file buffers.
 *   **Cline / Continue Adapters:** Formatting local routes to act as custom providers for standard extensions.
 
 ---
 
-## 🔮 FASE EXTRA — Multi-User Sharing, Team VPN & Authentication
+## 🔮 Phase 9 — Multi-User Collaboration & Authentication
 
 Security layer for team servers and shared GPU homelabs over VPN, preventing data leakage.
 
 *   **Secure Authentication:** Secure logins, password hashing (bcrypt), and JWT tokens.
-*   **Private Data Isolation:** Database filters to partition chats and knowledge bases by `user_id`.
+*   **Private Data Isolation:** Database filters to partition chats, projects, and knowledge bases by `user_id`.

@@ -1,39 +1,62 @@
-# AS Code
+# AS Core
 
 **By Alpha Software**
 
-AS Code is a lightweight, general-purpose local AI runtime designed for speed and simplicity on modest hardware. It provides a robust, Windows-optimized environment to run large language models locally with minimal overhead, a browser-first chat experience, and an OpenAI-compatible API.
+AS Core is a local-first cognitive workspace centered around projects that combines memory, documents, context, and execution to help people and organizations complete real work in a private, auditable, and fully owned environment.
 
-> **AS Code is NOT just for coding.** It is a personal AI platform for ideas, productivity, planning, writing, local experimentation — and now, document-aware conversations.
+> **AS Core is a cognitive workspace capable of coding among many other tasks.** Programming remains a first-class supported capability and skill domain, but it is no longer the sole definition of the product. The system manages project context, persists working memory, and executes work locally.
+
+---
+
+## 🎯 Mission Statement
+
+AS Core is a local-first cognitive workspace centered around projects that combines memory, documents, context, and execution to help people and organizations complete real work in a private, auditable, and fully owned environment.
+
+---
+
+## 🛠️ Core Principles
+
+*   **Project Ownership:** Every piece of knowledge belongs somewhere. Documents, chats, memory, tasks, and executions belong strictly to a project. There is no global retrieval contamination or context leakage.
+*   **Context Ownership:** What you see is what the system can access. No hidden context, no global contamination.
+*   **Local First:** The system remains usable offline on consumer hardware (e.g., 16 GB RAM). Context precision is prioritized over massive context windows.
+*   **Determinism & Observability:** Every runtime decision is explainable. The system implements strict tracing: `RAG-SCOPE`, `SKILL-TRACE`, `WORKFLOW-TRACE`, and `PROMPT-TRACE`.
+*   **Execution Over Conversation:** Conversation is not the final product—execution is. AS Core helps users organize information, analyze documents, process files, manage tasks, and execute terminal workflows.
+
+---
 
 ## Current Status
 
-AS Code is currently in an active development stage, evolving from a local chat server into an extensible **Unified Smart Main Agent Runtime** (offline-first, modular, and hardware-optimized alternative to Claude Code, Cursor, or NotebookLM on Windows).
+AS Core is in an active development stage, evolving from a local chat server into an extensible, project-centric cognitive workspace runtime.
 
 Core architecture and **Phases 1, 2 & 3** are fully completed:
 - **Phase 1 (Core & RAG NotebookLM):** LiteRT-LM Windows inference (GPU accelerated), OpenAI-compatible API, dynamic capability registry, skill prompt injection, and hybrid semantic/keyword retrieval vector pipeline.
 - **Phase 2 (Working Memory Layer):** Runtime-native CRUD memory tables (variables, tasks with priority, observations), session-based isolation (`session_id`), cognitive prompt injection in system prompt, and event-driven UI panel.
-- **Phase 3 (Smart Main Agent Foundation & Runtime Hardening):** Unified Runtime Coordinator managing memory limits, deterministic workflow transitions, and skill suggestions. Also includes **Output Stream Stabilization**, **Backend Parameter Presets**, and **Runtime Hardening** (immutable `RuntimeContract`/`ContextManifest` dual flow separating context assembly from atomic post-inference database side-effects in `RuntimeStateMutator`, alongside a deterministic `DeterministicContinuityResolver` and `DeterministicLanguageDetector` with `LightweightStateStore` for follow-up query carryover).
+- **Phase 3 (Smart Main Agent Foundation & Runtime Hardening):** Unified Runtime Coordinator managing memory limits, deterministic workflow transitions, and skill suggestions. Includes output stabilization, backend presets, and runtime hardening (immutable `RuntimeContract`/`ContextManifest` flow).
+- **Phase 3.5 & 3.6 (Agent Loop & Intent Gate):** Server-side agent loops, native execution protocol parsing (`capability.execute()`), session-scoped RAG (Active Retrieval Scope), intent gate keyword boundaries (`\b`), and prompt family registry.
 
-Current focus (Phase 3.5):
-- **Phase 3.5 (Agent Control Loop):** Server-side agent loops, native execution protocol parsing (`capability.execute()`), and cognitive prompt tuning.
+Current focus:
+- **Phase 4 (Project Layer):** Scoping chats, documents, and memory under unified `project_id` boundaries.
+
+---
 
 ## 🚀 Key Features
 
 *   **LiteRT-LM Runtime:** Ultra-optimized inference engine for Windows hardware.
 *   **Hardware-Adaptive Profiles:** Auto-tunes settings (such as models and VRAM limits) to match your system's specs.
 *   **Browser-First UI:** Premium, minimal browser interface with direct document drop zone.
-*   **OpenAI-Compatible API:** Serve as a backend for VS Code extensions (Cline, Continue, etc.).
+*   **OpenAI-Compatible API:** Serve as a backend for VS Code extensions (Cline, Continue, etc.) and other clients.
 *   **RAG NotebookLM (RAG v2):** Multi-stage local pipeline: parses, chunks (AST-aware), generates local embeddings, stores metadata in SQLite + vectors in FAISS, and executes hybrid retrieval.
-*   **Working Memory Layer (Phase 2):** Persistent, session-aware short-term memory (variables, prioritizable tasks, observation provenance tracking) injected dynamically at the SYSTEM level. Fully isolated via dynamic session IDs, reset triggers, and cross-skill variable cleanup.
+*   **Working Memory Layer (Phase 2):** Persistent, session-aware short-term memory (variables, tasks, observations) injected dynamically at the SYSTEM level.
 *   **Structured Context Builder:** Composes retrieval context dynamically by grouping chunks under `## CONTEXT FROM DOCUMENTS` by file and section.
 *   **Low-Overhead Hot-Swapping:** Intelligent model loading and idle timeout unloads.
+
+---
 
 ## 📸 Screenshots
 
 ### Local AI Chat
 
-![AS Code UI](screenshots/ui-chat.png)
+![AS Core UI](screenshots/ui-chat.png)
 
 ### Features shown
 - Multi-model routing
@@ -43,18 +66,24 @@ Current focus (Phase 3.5):
 - Browser-based UI
 - Document upload panel
 
+---
+
 ## 💻 Hardware Philosophy
 
-AS Code is built for "Real Hardware"—the laptops and desktops people actually own. While a dedicated GPU is recommended for the best experience, our architecture is designed to remain responsive even on mid-range systems.
+AS Core is built for "Real Hardware"—the laptops and desktops people actually own. While a dedicated GPU is recommended, our architecture is designed to remain responsive on mid-range systems.
 
 - **Optimized for:** Windows 10/11
-- **Focus:** Maximum performance per watt/GB.
+- **Focus:** Maximum performance per watt/GB on 16 GB RAM laptops.
+
+---
 
 ## 🏗 Architecture Summary
 
-AS Code uses a modular architecture built on top of FastAPI and LiteRT-LM. It acts as an intelligent routing and execution layer for local models, abstracting away the complexity of VRAM management and hardware-specific configurations, while exposing a standard OpenAI-compatible REST API.
+AS Core uses a modular architecture built on top of FastAPI and LiteRT-LM. It acts as an intelligent routing and execution layer for local models, abstracting away the complexity of VRAM management and hardware-specific configurations, while exposing a standard OpenAI-compatible REST API.
 
 Document context injection is handled as a thin layer between the API and the engine — zero changes to inference infrastructure.
+
+---
 
 ## 🛠 Installation
 
@@ -105,14 +134,11 @@ The full dependency list is in `requirements.txt`. Key packages:
 | `rank-bm25` | Keyword retrieval for hybrid RAG (RAG v2) |
 | `numpy` | Embedding array operations (RAG v2) |
 
-To install manually:
-```powershell
-pip install -r requirements.txt
-```
+---
 
 ## 🧠 Manual Model Setup (Important)
 
-AS Code uses a **Role-Based Architecture**. The internal logic doesn't care about specific model names, only about the role the model plays.
+AS Core uses a **Role-Based Architecture**. The internal logic doesn't care about specific model names, only about the role the model plays.
 
 | Role           | Purpose                                      | Model File (LiteRT-LM) |
 |----------------|----------------------------------------------|------------------------|
@@ -130,6 +156,8 @@ AS Code uses a **Role-Based Architecture**. The internal logic doesn't care abou
 3. Place it at: `models\gemma\gemma-3n-E2B-it-int4.litertlm`
 4. Run the server — the runtime detects and registers the roles automatically.
 
+---
+
 ## 🏃‍♂️ Running the Project
 
 Start the local server using the provided script:
@@ -142,9 +170,11 @@ This will activate the environment, start the FastAPI server, and output logs cl
 
 Once running, open your browser at `http://localhost:8000`.
 
-## 📄 Document Upload (RAG)
+---
 
-AS Code supports uploading documents to chat with their contents. This works entirely locally — no cloud involved.
+## 📄 Document Ingest (RAG)
+
+AS Core supports uploading documents to chat with their contents. This works entirely locally — no cloud involved.
 
 ### Supported formats
 - **TXT** — plain text files
@@ -169,9 +199,11 @@ DELETE /api/documents/<session_id>   → Clear session
 
 Include `X-Document-Session-Id: <session_id>` as a header in your `/v1/chat/completions` requests to activate context injection.
 
+---
+
 ## 🧠 RAG NotebookLM Pipeline (v2)
 
-AS Code includes a full vector-search RAG pipeline for deeper, more precise document-aware conversations. It runs 100% locally — no cloud, no API keys required.
+AS Core includes a full vector-search RAG pipeline for deeper, more precise document-aware conversations. It runs 100% locally.
 
 ### Activation
 
@@ -230,7 +262,7 @@ curl -X POST http://localhost:8000/v1/chat/completions \
 | `X-Mode` | `normal` / `thinking` / `code` | `normal` |
 | `X-Pipeline` | `chat` / `code` | `chat` |
 
-
+---
 
 ## 🔌 API Endpoints
 
@@ -259,76 +291,29 @@ Once running, the API is available at `http://localhost:8000`.
 | `/v1/memory/reset` | POST | Clear all working memory for the session |
 | `/api/documents/*` | * | *(Deprecated)* Legacy session-based document endpoints |
 
+---
+
 ## 🧠 Runtime Capabilities
 
-AS Code is designed to be hardware-aware, provider-aware, and runtime-modular. Functionalities are not hardcoded; instead, they are dynamically discovered and evaluated lazily using the **Runtime Capability System**. 
+AS Core is hardware-aware, provider-aware, and runtime-modular. Functionalities are evaluated lazily using the **Runtime Capability System**. 
 
-The UI queries `GET /v1/capabilities` to render controls dynamically rather than displaying inactive or fake features.
+The UI queries `GET /v1/capabilities` to render controls dynamically rather than displaying inactive features.
 
-Each capability is returned with metadata, category, and security scopes:
-```json
-{
-  "terminal": {
-    "id": "terminal",
-    "name": "Terminal Execution",
-    "description": "Run terminal commands and shell processes directly on host system",
-    "category": "developer",
-    "version": "1.0.0",
-    "available": true,
-    "enabled": false,
-    "provider": "powershell",
-    "status": "offline",
-    "reason": "Disabled for security reasons. Can be enabled via capability overrides.",
-    "scopes": ["terminal.execute"]
-  }
-}
-```
+Capabilities are organized by categories (`core`, `documents`, `tools`, `multimodal`, `developer`, `network`) and define explicit security `scopes` which active Skills consume. Users can explicitly enable/disable capabilities globally via the `capability_overrides` dictionary setting.
 
-Capabilities are organized by categories (`core`, `documents`, `tools`, `multimodal`, `developer`, `network`) and define explicit security `scopes` which future Skills will consume. Users can explicitly enable/disable capabilities globally via the `capability_overrides` dictionary setting.
+---
 
-## 🔌 VSCode / Cline Compatibility
+## 🔌 Compatibility & Connectors
 
-AS Code exposes an OpenAI-compatible API, making it fully compatible with VSCode extensions like Cline. Simply configure your extension to use an OpenAI-compatible provider with the base URL pointing to `http://localhost:8000/v1` and any dummy API key.
+AS Core exposes an OpenAI-compatible API, making it compatible with IDE tools and editors (like VSCode extensions Cline or Continue) as a custom backend. Configure your extension to use an OpenAI-compatible provider with the base URL pointing to `http://localhost:8000/v1` and any dummy API key.
 
-## 🗺 Roadmap Overview
-
-- **Completed (Phase 1):** LiteRT core runtime, GPU acceleration, OpenAI API, minimal browser UI, **NotebookLM RAG Pipeline**, and Dynamic Capability System (registry, safety overrides).
-- **Completed (Phase 2):** **Working Memory Layer** (SQLite persistent tables, session_id isolation, API endpoints, system prompt injection, and event-driven UI drawer).
-- **In Progress (Phase 3):** **Smart Main Agent** (server-side agent loops, XML/JSON capability call parsing, cognitive prompting).
-- **Upcoming (Phase 4 & 5):** Capability Execution (`capability.execute()`), HITL confirmation queues.
-- **Future (Phase 6 to 8):** VSCode/IDE integration, marketplace, and Claude/MCP Translation Layer.
+---
 
 ## 🤝 Contributing
 
 Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-## 💖 Support the Project
-
-If AS Code helps you, consider supporting development.
-
-Your support helps improve:
-
-* LiteRT Windows optimization
-* Local AI infrastructure
-* VSCode/Cline integration
-* Performance optimization
-* RAG and document intelligence
-* Future autonomous systems
-
-### Crypto Donations
-
-USDT (TRC20)
-
-```text
-TADArdWELAAQMVtufWzcfF3R2yNPnyRfXr
-```
-
-IMPORTANT:
-Please send only USDT using the TRON (TRC20) network.
-
-Thank you for supporting open local AI infrastructure development.
-
-— AS Code / Alpha Software
+---
 
 ## 📄 License
 
