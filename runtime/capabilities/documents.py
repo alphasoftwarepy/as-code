@@ -9,6 +9,11 @@ class DocumentsCapability(BaseCapability):
     category = "documents"
     version = "1.0.0"
     scopes = ["documents.read", "documents.write"]
+    actions = {
+        "read": "Read and parse document content",
+        "write": "Write or update document content"
+    }
+    approval_required_actions = []
 
     def check(self, settings, app_state=None) -> CapabilityStatus:
         missing = []

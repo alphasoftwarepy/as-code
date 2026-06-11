@@ -54,7 +54,8 @@ class EngineManager:
         provider_registry: ProviderRegistry,
         hardware_info: Optional[HardwareInfo] = None,
         max_vram_mb: int = 3200,
-        model_unload_timeout: float = 300.0,
+        model_unload_timeout: Optional[float] = None,
+        model_absolute_lifetime: Optional[float] = None,
         anti_oom_threshold_mb: int = 500,
     ) -> None:
         self.registry = provider_registry
@@ -63,11 +64,13 @@ class EngineManager:
         # Hardware-adaptive settings
         self._max_vram_mb = max_vram_mb
         self._model_unload_timeout = model_unload_timeout
+        self._model_absolute_lifetime = model_absolute_lifetime
         self._anti_oom_threshold_mb = anti_oom_threshold_mb
 
         # Model tracking
         self._model_configs: dict[str, dict] = {}  # model_id → config
         self._last_used: dict[str, float] = {}  # model_id → timestamp
+        self._loaded_at: dict[str, float] = {}  # model_id → load timestamp
         self._active_model: Optional[str] = None
 
         # Background tasks
@@ -83,7 +86,10 @@ class EngineManager:
 
         if tier == HardwareTier.ULTRA_LIGHT:
             self._max_vram_mb = min(self._max_vram_mb, 1500)
-            self._model_unload_timeout = 120.0
+            if self._model_unload_timeout is None:
+                self._model_unload_timeout = 120.0
+            if self._model_absolute_lifetime is None:
+                self._model_absolute_lifetime = 1800.0
             self._anti_oom_threshold_mb = 300
             logger.info("Applied ultra-light hardware profile")
 
@@ -92,13 +98,19 @@ class EngineManager:
                 self._max_vram_mb,
                 int(self.hardware.gpu.vram_total_mb * 0.8)
             )
-            self._model_unload_timeout = 300.0
+            if self._model_unload_timeout is None:
+                self._model_unload_timeout = 300.0
+            if self._model_absolute_lifetime is None:
+                self._model_absolute_lifetime = 1800.0
             self._anti_oom_threshold_mb = 500
             logger.info("Applied balanced hardware profile")
 
         elif tier == HardwareTier.PERFORMANCE:
             self._max_vram_mb = int(self.hardware.gpu.vram_total_mb * 0.9)
-            self._model_unload_timeout = 600.0
+            if self._model_unload_timeout is None:
+                self._model_unload_timeout = 600.0
+            if self._model_absolute_lifetime is None:
+                self._model_absolute_lifetime = 3600.0
             self._anti_oom_threshold_mb = 1000
             logger.info("Applied performance hardware profile")
 
@@ -191,6 +203,22 @@ class EngineManager:
         if provider:
             await provider.cancel_generation(request_id)
 
+    def touch_activity(self, model_id: Optional[str] = None) -> None:
+        """Extend the residency timeout of a model based on real system events."""
+        m_id = model_id or self._active_model
+        if m_id:
+            self._last_used[m_id] = time.time()
+            logger.debug(f"[MODEL-LIFECYCLE] Activity touched for model: {m_id}")
+
+    async def warmup_model(self, model_id: str) -> None:
+        """Pre-warm a model in the background at startup without blocking."""
+        logger.info(f"[MODEL-LIFECYCLE] Warmup initiated for model: {model_id}")
+        try:
+            await self._ensure_model_loaded(model_id)
+            logger.info(f"[MODEL-LIFECYCLE] Warmup completed for model: {model_id}")
+        except Exception as e:
+            logger.error(f"[MODEL-LIFECYCLE] Warmup failed for model {model_id}: {e}")
+
     # ── Model Loading ──────────────────────────────────────────
 
     async def _ensure_model_loaded(self, model_id: str) -> InferenceProvider:
@@ -219,15 +247,19 @@ class EngineManager:
             loaded = await provider.loaded_models()
             for loaded_id in loaded:
                 if loaded_id != model_id:
-                    logger.info(f"Swapping model: {loaded_id} → {model_id}")
+                    logger.info(f"[MODEL-SWAP] Swapping active model: {loaded_id} → {model_id}")
                     await provider.unload_model(loaded_id)
+                    self._loaded_at.pop(loaded_id, None)
+                    self._last_used.pop(loaded_id, None)
 
         # Load the model
-        logger.info(f"Loading model: {model_id}")
+        logger.info(f"[MODEL-LOAD] Ensuring model is loaded: {model_id}")
         print("ENGINE CONFIG PATH:", config["path"])
         await provider.load_model(model_id, config["path"])
         self._active_model = model_id
         self._last_used[model_id] = time.time()
+        self._loaded_at[model_id] = time.time()
+        logger.info(f"[MODEL-LIFECYCLE] Model loaded successfully: {model_id}")
         return provider
 
     async def _check_resources(self, required_vram_mb: int) -> None:
@@ -257,7 +289,9 @@ class EngineManager:
         """Background loop to unload idle models (dynamic unloading)."""
         while self._running:
             try:
-                await asyncio.sleep(30)  # Check every 30 seconds
+                # Sleep dynamically based on configured unload timeout
+                sleep_interval = min(5.0, max(1.0, self._model_unload_timeout))
+                await asyncio.sleep(sleep_interval)
 
                 provider = self.registry.active_provider
                 if provider is None:
@@ -267,16 +301,32 @@ class EngineManager:
                 loaded = await provider.loaded_models()
 
                 for model_id in loaded:
+                    # 1. Check Idle Timeout
                     last_used = self._last_used.get(model_id, 0)
                     idle_time = now - last_used
 
+                    # 2. Check Absolute Lifetime
+                    loaded_at = self._loaded_at.get(model_id, now)
+                    lifetime = now - loaded_at
+
                     if idle_time > self._model_unload_timeout:
                         logger.info(
-                            f"Unloading idle model: {model_id} "
-                            f"(idle for {idle_time:.0f}s)"
+                            f"[MODEL-UNLOAD] Unloading idle model: {model_id} "
+                            f"(idle for {idle_time:.1f}s, threshold {self._model_unload_timeout}s)"
                         )
                         await provider.unload_model(model_id)
                         self._last_used.pop(model_id, None)
+                        self._loaded_at.pop(model_id, None)
+                        if self._active_model == model_id:
+                            self._active_model = None
+                    elif lifetime > self._model_absolute_lifetime:
+                        logger.info(
+                            f"[MODEL-UNLOAD] Force recycling model: {model_id} "
+                            f"(absolute lifetime {lifetime:.1f}s exceeded limit of {self._model_absolute_lifetime}s)"
+                        )
+                        await provider.unload_model(model_id)
+                        self._last_used.pop(model_id, None)
+                        self._loaded_at.pop(model_id, None)
                         if self._active_model == model_id:
                             self._active_model = None
 
@@ -298,6 +348,18 @@ class EngineManager:
         if provider:
             provider_metrics = await provider.get_metrics()
 
+        now = time.time()
+        residency_stats = {}
+        for m_id in self._last_used:
+            last_used = self._last_used.get(m_id, 0)
+            loaded_at = self._loaded_at.get(m_id, last_used)
+            residency_stats[m_id] = {
+                "idle_duration_sec": now - last_used,
+                "lifetime_duration_sec": now - loaded_at,
+                "idle_timeout_sec": self._model_unload_timeout,
+                "absolute_lifetime_sec": self._model_absolute_lifetime,
+            }
+
         return {
             "active_model": self._active_model,
             "hardware_tier": self.hardware.tier.value,
@@ -310,6 +372,7 @@ class EngineManager:
             "ram_available_mb": get_ram_available_mb() or self.hardware.memory.available_mb,
             "provider": provider_metrics,
             "registered_models": list(self._model_configs.keys()),
+            "residency": residency_stats,
         }
 
     def get_registered_models(self) -> list[dict]:

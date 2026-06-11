@@ -26,15 +26,53 @@ class AgentControlRunner:
         self.engine = engine
         self.registry = registry or get_capability_registry()
 
-    async def execute_capability(self, capability_id: str, action: str, params: dict, app_state=None) -> dict:
+    async def execute_capability(
+        self,
+        capability_id: str,
+        action: str,
+        params: dict,
+        app_state=None,
+        session_id: Optional[str] = None,
+        db: Optional[Session] = None
+    ) -> dict:
         """Fetch, check, and execute capability using standard envelope."""
+        if hasattr(self.engine, "touch_activity"):
+            self.engine.touch_activity()
+            
         cap = self.registry.get(capability_id)
         if not cap:
+            logger.warning(f"[CAPABILITY-GOVERNANCE] Invocation rejected: capability '{capability_id}' not found in registry.")
+            
+            # Resolve language from database (default to ES)
+            lang = "ES"
+            if db and session_id:
+                try:
+                    from api.memory_models import MemoryVariable
+                    lang_var = db.query(MemoryVariable).filter_by(
+                        session_id=session_id, key="wf_last_language"
+                    ).first()
+                    if lang_var and lang_var.value:
+                        lang = lang_var.value
+                except Exception:
+                    pass
+            
+            if lang == "ES":
+                output_msg = f"La capacidad '{capability_id}' no está registrada en el sistema. ¿Deseas crear una nueva habilidad (skill) para '{capability_id}'? (Sí/No)"
+            else:
+                output_msg = f"The capability '{capability_id}' is not registered in the system. Would you like to create a new skill for '{capability_id}'? (Yes/No)"
+                
+            if session_id:
+                from runtime.coordinator.state_store import get_pending_skill_store
+                store = get_pending_skill_store()
+                store.register_pending(session_id, capability_id)
+                logger.info(f"[SKILL-CREATION] Pending skill creation registered for session '{session_id}' (capability: '{capability_id}').")
+                
             return {
-                "success": False,
+                "success": True,
+                "status": "pending_skill_creation",
                 "capability": capability_id,
                 "action": action,
-                "output": f"[Error: Capability '{capability_id}' not found in registry]"
+                "output": output_msg
             }
 
         # Check availability and status dynamically
@@ -55,6 +93,39 @@ class AgentControlRunner:
                 "output": f"[Error: Capability '{capability_id}' is disabled: {status.reason}]"
             }
 
+        # 4.1.7 Approval Contract Check
+        if cap.requires_approval(action):
+            import uuid
+            approval_id = f"appr-{uuid.uuid4().hex[:12]}"
+            logger.info(f"[APPROVAL-CONTRACT] Paused execution of '{capability_id}.{action}'. Awaiting human approval. approval_id={approval_id}")
+            
+            # Resolve language from database (default to ES)
+            lang = "ES"
+            if db and session_id:
+                try:
+                    from api.memory_models import MemoryVariable
+                    lang_var = db.query(MemoryVariable).filter_by(
+                        session_id=session_id, key="wf_last_language"
+                    ).first()
+                    if lang_var and lang_var.value:
+                        lang = lang_var.value
+                except Exception:
+                    pass
+                    
+            if lang == "ES":
+                output_msg = f"[Aprobación Requerida: La acción '{action}' en la capacidad '{capability_id}' requiere confirmación del usuario. approval_id: {approval_id}]"
+            else:
+                output_msg = f"[Approval Required: Action '{action}' on capability '{capability_id}' requires user confirmation. approval_id: {approval_id}]"
+                
+            return {
+                "success": True,
+                "status": "pending_approval",
+                "approval_id": approval_id,
+                "capability": capability_id,
+                "action": action,
+                "output": output_msg
+            }
+
         try:
             return await cap.execute(action, params)
         except Exception as e:
@@ -65,6 +136,7 @@ class AgentControlRunner:
                 "action": action,
                 "output": f"[Error: Execution failed: {str(e)}]"
             }
+
 
     def _optimize_context(self, messages: List[ChatMessage]) -> List[ChatMessage]:
         """Limit max message history length to prevent context bloat (sliding window)."""
@@ -83,6 +155,7 @@ class AgentControlRunner:
         body: ChatCompletionRequest,
         inference_request: InferenceRequest,
         app_state=None,
+        session_id: Optional[str] = None,
     ) -> ChatCompletionResponse:
         """Run the agent control loop in non-streaming mode."""
         step = 0
@@ -106,13 +179,30 @@ class AgentControlRunner:
             params = call.get("params", {})
             
             # Execute
-            res_envelope = await self.execute_capability(capability_id, action, params, app_state)
+            res_envelope = await self.execute_capability(
+                capability_id, action, params, app_state, session_id=session_id, db=db
+            )
             output = res_envelope.get("output", "")
             
             # Record assistant generation and tool execution result in conversation messages
             body.messages.append(ChatMessage(role="assistant", content=result.text))
             body.messages.append(ChatMessage(role="tool", name=capability_id, content=output))
             
+            # Check for early exit on pending approval or pending skill creation
+            status = res_envelope.get("status")
+            if status in ("pending_skill_creation", "pending_approval"):
+                assistant_content += f"\n\n⚙️ **[Running {capability_id}.{action}...]**\n```\n[Output]: {output}\n```\n\n"
+                break
+                
+            success = res_envelope.get("success", True)
+            if not success:
+                assistant_content += f"\n\n⚙️ **[Running {capability_id}.{action}...]**\n```\n[Output]: {output}\n```\n\n"
+                break
+                
+            if "[Placeholder:" in output:
+                assistant_content += f"\n\n⚙️ **[Running {capability_id}.{action}...]**\n```\n[Output]: {output}\n```\n\n"
+                break
+                
             # Optimize context
             body.messages = self._optimize_context(body.messages)
             
@@ -153,6 +243,7 @@ class AgentControlRunner:
         body: ChatCompletionRequest,
         inference_request: InferenceRequest,
         app_state=None,
+        session_id: Optional[str] = None,
     ) -> AsyncIterator[InferenceResult]:
         """Run the agent control loop in streaming mode, yielding tokens."""
         step = 0
@@ -181,7 +272,9 @@ class AgentControlRunner:
             yield InferenceResult(text=exec_start_token, model_id=inference_request.model_id)
             
             # Execute
-            res_envelope = await self.execute_capability(capability_id, action, params, app_state)
+            res_envelope = await self.execute_capability(
+                capability_id, action, params, app_state, session_id=session_id, db=db
+            )
             output = res_envelope.get("output", "")
             
             # Yield tool output chunk wrapped in code blocks
@@ -192,6 +285,17 @@ class AgentControlRunner:
             body.messages.append(ChatMessage(role="assistant", content=assistant_buffer))
             body.messages.append(ChatMessage(role="tool", name=capability_id, content=output))
             
+            status = res_envelope.get("status")
+            if status in ("pending_skill_creation", "pending_approval"):
+                break
+                
+            success = res_envelope.get("success", True)
+            if not success:
+                break
+                
+            if "[Placeholder:" in output:
+                break
+                
             # Optimize context
             body.messages = self._optimize_context(body.messages)
             
@@ -211,3 +315,4 @@ class AgentControlRunner:
             
         # Final stop chunk
         yield InferenceResult(text="", finish_reason="stop", model_id=inference_request.model_id)
+

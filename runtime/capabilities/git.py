@@ -9,6 +9,13 @@ class GitCapability(BaseCapability):
     category = "tools"
     version = "1.0.0"
     scopes = ["git.read", "git.write"]
+    actions = {
+        "status": "Check repository git status",
+        "diff": "Show modifications compared to index/commit",
+        "commit": "Record changes to the repository history",
+        "checkout": "Switch branches or restore working tree files"
+    }
+    approval_required_actions = ["commit", "checkout"]
 
     def check(self, settings, app_state=None) -> CapabilityStatus:
         git_path = shutil.which("git")

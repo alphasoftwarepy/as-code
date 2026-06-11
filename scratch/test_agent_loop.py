@@ -67,7 +67,7 @@ async def test_agent_loop_sync():
     )
     
     res = await runner.run_inference_loop(None, body, inf_req)
-    assert engine.call_count == 2
+    assert engine.call_count == 1
     
     # Assert third message in history is the tool output
     # messages[0] = User: check git status please
@@ -78,17 +78,46 @@ async def test_agent_loop_sync():
     assert tool_msg.role == "tool"
     assert tool_msg.name == "git"
     assert "Placeholder: Git Integration executed action 'status'" in tool_msg.content
-    assert "I am done" in res.choices[0].message.content
+    assert "⚙️ **[Running git.status...]**" in res.choices[0].message.content
     print("Sync loop tests passed.")
 
 async def test_agent_loop_max_steps():
     print("Testing MAX_AGENT_STEPS enforcement...")
+    
+    from runtime.capabilities.base import BaseCapability
+    from runtime.capabilities.models import CapabilityStatus
+    
+    class TestCapability(BaseCapability):
+        id = "git"
+        name = "Git Integration"
+        description = "Mock Git Integration for testing"
+        category = "tools"
+        version = "1.0.0"
+        scopes = ["git.read"]
+        actions = {"status": "Check status"}
+
+        def check(self, settings, app_state=None) -> CapabilityStatus:
+            return CapabilityStatus(
+                id=self.id, name=self.name, description=self.description,
+                category=self.category, version=self.version,
+                available=True, enabled=True, status="healthy"
+            )
+
+        async def execute(self, action: str, params: dict) -> dict:
+            return {
+                "success": True,
+                "capability": self.id,
+                "action": action,
+                "output": "Real status output without placeholder tag"
+            }
+
     # Model keeps outputting git status calls endlessly
     mock_outputs = [
         '```json_call\n{"capability": "git", "action": "status", "params": {}}\n```'
     ] * 5
     engine = MockEngine(mock_outputs)
     registry = CapabilityRegistry()
+    registry.register(TestCapability())
     runner = AgentControlRunner(engine, registry)
     
     body = ChatCompletionRequest(

@@ -84,10 +84,88 @@ async def chat_completions(
     is_spanish = len(msg_words & spanish_indicators) >= 2 or any(c in user_message for c in ["¿", "á", "é", "í", "ó", "ú", "ñ"])
     lang = "ES" if is_spanish else "EN"
 
-    # ── Session / Skill resolution ──────────────────────────────
     session_id = request.headers.get("X-Session-Id", "default_session")
+
+    # Persist user message in chat history
+    try:
+        from runtime.projects.manager import ProjectManager
+        pm = ProjectManager()
+        pm.add_chat_message(db, session_id, role="user", content=user_message)
+    except Exception as e:
+        logger.error(f"Failed to save user message to history: {e}")
+
+    
+    # ── Stateless Pending Skill Interception (Phase 4.1.4) ─────────
+    from runtime.coordinator.state_store import get_pending_skill_store
+    pending_store = get_pending_skill_store()
+    pending_capability = pending_store.get_pending(session_id)
+    
+    if pending_capability:
+        clean_msg = user_message.strip().lower()
+        
+        # Check language
+        spanish_indicators = {"el", "la", "los", "las", "es", "que", "en", "un", "una", "del", "al", "como", "con", "por", "para", "mi", "mis", "de", "no", "cual"}
+        msg_words = set(clean_msg.split())
+        is_spanish = len(msg_words & spanish_indicators) >= 1 or any(c in clean_msg for c in ["¿", "á", "é", "í", "ó", "ú", "ñ", "si", "sí"])
+        
+        is_yes = clean_msg in ("si", "sí", "yes", "y", "claro", "aceptar", "ok", "confirmar")
+        is_no = clean_msg in ("no", "cancelar", "cancel", "reject", "n", "denegar")
+        
+        if is_yes:
+            pending_store.clear_pending(session_id)
+            if is_spanish:
+                response_text = f"🛠️ Funcionalidad en construcción (creación de skill para '{pending_capability}')."
+            else:
+                response_text = f"🛠️ Feature under construction (skill creation for '{pending_capability}')."
+        elif is_no:
+            pending_store.clear_pending(session_id)
+            if is_spanish:
+                response_text = "Operación cancelada."
+            else:
+                response_text = "Operation canceled."
+        else:
+            if is_spanish:
+                response_text = f"No he entendido tu respuesta. ¿Deseas crear una nueva habilidad (skill) para '{pending_capability}'? (Sí/No)"
+            else:
+                response_text = f"I didn't understand your response. Would you like to create a new skill for '{pending_capability}'? (Yes/No)"
+                
+        if body.stream:
+            from providers.base import InferenceResult
+            async def stream_pending_msg():
+                yield InferenceResult(text=response_text, model_id=body.model)
+                yield InferenceResult(text="", finish_reason="stop", model_id=body.model)
+                
+            return StreamingResponse(
+                stream_inference_results(stream_pending_msg(), body.model, request_id),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "X-Accel-Buffering": "no",
+                    "X-Request-ID": request_id,
+                },
+            )
+        else:
+            return ChatCompletionResponse(
+                id=f"chatcmpl-{uuid.uuid4().hex[:12]}",
+                model=body.model,
+                choices=[
+                    ChatCompletionChoice(
+                        index=0,
+                        message=ChatMessage(role="assistant", content=response_text),
+                        finish_reason="stop",
+                    )
+                ],
+                usage=UsageInfo(
+                    prompt_tokens=0,
+                    completion_tokens=0,
+                    total_tokens=0
+                )
+            )
+
     skill_id = request.headers.get("X-Skill")
     skill_service = getattr(request.app.state, "skill_service", None)
+
 
     # ── Root Prompt Resolution via Prompt Family ──────────────────
     from runtime.coordinator.prompts import resolve_root_prompt
@@ -261,6 +339,7 @@ async def chat_completions(
             body=body,
             inference_request=inference_request,
             app_state=request.app,
+            session_id=session_id,
         )
 
         # Apply state mutations post-inference dispatch (Subfase 1D)
@@ -272,7 +351,7 @@ async def chat_completions(
                 logger.warning(f"Failed to apply state mutations in streaming flow: {mut_err}")
 
         return StreamingResponse(
-            stream_inference_results(result_stream, model_id, request_id),
+            stream_inference_results(result_stream, model_id, request_id, session_id, db),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
@@ -289,6 +368,7 @@ async def chat_completions(
             body=body,
             inference_request=inference_request,
             app_state=request.app,
+            session_id=session_id,
         )
         elapsed_ms = (time.perf_counter() - start) * 1000
 
@@ -299,6 +379,29 @@ async def chat_completions(
                 RuntimeStateMutator.apply_state_mutations(db, contract, manifest)
             except Exception as mut_err:
                 logger.warning(f"Failed to apply state mutations in non-streaming flow: {mut_err}")
+
+        # Persist assistant response in chat history
+        if agent_response and agent_response.choices:
+            assistant_content = agent_response.choices[0].message.content
+            try:
+                from runtime.projects.manager import ProjectManager
+                pm = ProjectManager()
+                pm.add_chat_message(db, session_id, role="assistant", content=assistant_content)
+                
+                # Autotitle checking
+                chat = pm.get_chat_by_session(db, session_id)
+                if chat and (chat.title == "Nuevo Chat" or chat.title.startswith("Chat ")):
+                    msgs = pm.list_chat_messages(db, session_id)
+                    user_msgs = [m for m in msgs if m.role == "user"]
+                    if user_msgs:
+                        first_user_msg = user_msgs[0].content
+                        from api.streaming import generate_auto_title
+                        new_title = generate_auto_title(first_user_msg)
+                        if new_title and new_title != "Nuevo Chat":
+                            pm.rename_chat(db, session_id, new_title)
+                            logger.info(f"[AUTOTITLE] Auto-titled chat {session_id} to '{new_title}'")
+            except Exception as save_err:
+                logger.error(f"Failed to save assistant response or autotitle: {save_err}")
 
         agent_response.latency_ms = elapsed_ms
         return agent_response

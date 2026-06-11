@@ -8,6 +8,11 @@ class RAGCapability(BaseCapability):
     category = "core"
     version = "1.0.0"
     scopes = ["rag.retrieve", "rag.index"]
+    actions = {
+        "retrieve": "Query relevant context from ingested documents",
+        "index": "Index new files into RAG memory"
+    }
+    approval_required_actions = []
 
     def check(self, settings, app_state=None) -> CapabilityStatus:
         enable_rag_mode = getattr(settings, "enable_rag_mode", False)

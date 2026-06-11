@@ -8,7 +8,7 @@ Endpoints:
   DELETE /api/documents/{session_id}   → limpiar sesión
 """
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Request
 from pydantic import BaseModel
 import logging
 
@@ -60,6 +60,7 @@ async def create_document_session(
 async def upload_document(
     session_id: str,
     file: UploadFile = File(...),
+    request: Request = None,
     service: DocumentService = Depends(get_document_service),
 ):
     """
@@ -71,6 +72,9 @@ async def upload_document(
       - session_id: ID de sesión (obtén con POST /api/documents/session)
     """
     try:
+        if request and hasattr(request.app.state, "engine"):
+            request.app.state.engine.touch_activity()
+            
         doc = service.upload_and_parse(file, session_id)
         return UploadResponse(
             filename=doc.filename,

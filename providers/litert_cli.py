@@ -63,6 +63,7 @@ class LiteRTCLIProvider(InferenceProvider):
         self._model_refs: dict[str, str] = {} # model_id → file path
         self._active_processes: dict[str, asyncio.subprocess.Process] = {}
         self._cancel_events: dict[str, asyncio.Event] = {}
+        self._spawn_counts: dict[str, int] = {}
 
     # ── Capabilities ───────────────────────────────────────────
 
@@ -177,14 +178,12 @@ class LiteRTCLIProvider(InferenceProvider):
     # ── Model Management ───────────────────────────────────────
 
     async def load_model(self, model_id: str, model_path: str) -> None:
-        """Register a model path. Actual loading happens at inference time
-        (lazy loading — CLI spawns a new process per inference call)."""
-        # LiteRT-LM models are referenced by imported registry ID
+        """Register a model path. Actual loading is lazy (on inference)."""
         self._model_refs[model_id] = model_path
-        logger.info(f"Model registered: {model_id} → {model_path}")
+        logger.info(f"[MODEL-LOAD] Model path registered: {model_id} → {model_path}")
 
     async def unload_model(self, model_id: str) -> None:
-        """Unregister a model and terminate any active process."""
+        """Unload a model, freeing all associated resources."""
         if model_id in self._active_processes:
             proc = self._active_processes[model_id]
             try:
@@ -245,12 +244,21 @@ class LiteRTCLIProvider(InferenceProvider):
         # Build CLI command
         cmd = self._build_command(model_ref, request)
 
+        # Detect cold vs warm start
+        is_first_load = self._spawn_counts.get(request.model_id, 0) == 0
+        self._spawn_counts[request.model_id] = self._spawn_counts.get(request.model_id, 0) + 1
+        
+        if is_first_load:
+            logger.info(f"[MODEL-COLD-START] First invocation (cold startup) for model: {request.model_id}")
+        else:
+            logger.info(f"[MODEL-WARM-START] Subsequent invocation (OS-cached startup) for model: {request.model_id}")
+
         start_time = time.perf_counter()
         tokens_generated = 0
 
         try:
             self._status = ProviderStatus.BUSY
-            logger.info(f"Starting LiteRT-LM subprocess: {' '.join(cmd)}")
+            logger.info(f"[MODEL-LOAD] Spawning LiteRT-LM process for model {request.model_id}: {' '.join(cmd)}")
 
             # Force UTF-8 for the subprocess (essential on Windows)
             env = os.environ.copy()
@@ -356,7 +364,7 @@ class LiteRTCLIProvider(InferenceProvider):
 
                 if first_token_time is None:
                     first_token_time = time.perf_counter()
-                    logger.info(f"First token received for {request.request_id} in {first_token_time - start_time:.2f}s")
+                    logger.info(f"[MODEL-FIRST-TOKEN] First token received for {request.request_id} in {first_token_time - start_time:.3f}s")
 
                 # Track generated tokens (rough estimate)
                 if char.isspace():
@@ -404,10 +412,9 @@ class LiteRTCLIProvider(InferenceProvider):
 
             # Wait for process to finish
             return_code = proc.wait()
-            logger.info(f"Subprocess finished with return code {return_code}")
-
             elapsed = time.perf_counter() - start_time
             tps = tokens_generated / elapsed if elapsed > 0 else 0
+            logger.info(f"[MODEL-LIFECYCLE] Subprocess finished with return code {return_code}. (total_tokens={tokens_generated}, tps={tps:.1f}, elapsed={elapsed:.3f}s)")
 
             # Final chunk with finish reason
             yield InferenceResult(

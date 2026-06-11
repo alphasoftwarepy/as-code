@@ -42,6 +42,24 @@ class Settings(BaseSettings):
             try:
                 with open(config_path, "r", encoding="utf-8") as f:
                     self._config = yaml.safe_load(f) or {}
+                
+                # Load provider settings
+                providers_cfg = self._config.get("providers", {})
+                if "active" in providers_cfg:
+                    self.active_provider = providers_cfg["active"]
+                
+                litert_cli_cfg = providers_cfg.get("litert_cli", {})
+                if "backend" in litert_cli_cfg:
+                    self.litert_backend = litert_cli_cfg["backend"]
+                if "enable_speculative_decoding" in litert_cli_cfg:
+                    self.enable_speculative_decoding = bool(litert_cli_cfg["enable_speculative_decoding"])
+
+                # Check for lifecycle policies in config.yaml
+                lifecycle = self._config.get("lifecycle", {})
+                if "model_unload_timeout_sec" in lifecycle:
+                    self.model_unload_timeout_sec = float(lifecycle["model_unload_timeout_sec"])
+                if "model_absolute_lifetime_sec" in lifecycle:
+                    self.model_absolute_lifetime_sec = float(lifecycle["model_absolute_lifetime_sec"])
             except Exception as e:
                 print(f"Error loading config.yaml: {e}")
 
@@ -81,6 +99,9 @@ class Settings(BaseSettings):
     )
     model_unload_timeout_sec: float = Field(
         default=300.0, description="Seconds before unloading idle model"
+    )
+    model_absolute_lifetime_sec: float = Field(
+        default=1800.0, description="Maximum absolute lifetime of model in VRAM (seconds)"
     )
     anti_oom_threshold_mb: int = Field(
         default=500, description="Minimum free RAM before warning (MB)"

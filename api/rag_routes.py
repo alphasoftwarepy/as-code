@@ -121,6 +121,23 @@ async def upload_rag_document(
     db.commit()
     db.refresh(doc)
 
+    # Associate new document with project if session belongs to one
+    if session_id:
+        try:
+            from api.project_models import ProjectChat, ProjectDocument
+            chat_proj = db.query(ProjectChat).filter(ProjectChat.session_id == session_id).first()
+            if chat_proj:
+                # Add mapping in project_documents
+                assoc = ProjectDocument(
+                    project_id=chat_proj.project_id,
+                    document_id=doc.id
+                )
+                db.add(assoc)
+                db.commit()
+                logger.info(f"[PROJECTS] Associated document {doc.id} with project {chat_proj.project_id}")
+        except Exception as pe:
+            logger.error(f"[PROJECTS] Error associating document with project: {pe}")
+
     logger.info(
         f"[RAG-SAVED] doc_id={doc.id!r} | filename={doc.filename!r} | "
         f"pipeline={pipeline} | starting_background_ingest=True"

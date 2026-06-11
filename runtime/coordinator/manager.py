@@ -262,6 +262,67 @@ class PureCoordinator:
             )
         system_prompt = f"{system_prompt}{capability_instructions}"
 
+        # 7.6 Inject Capability Catalog (Phase 4.1.2)
+        from runtime.capabilities.registry import get_capability_registry
+        from config.settings import get_settings
+        
+        registry = get_capability_registry()
+        settings = get_settings()
+        
+        cap_count = len(registry.capabilities)
+        approval_actions_count = sum(len(cap.approval_required_actions) for cap in registry.capabilities.values())
+        
+        logger.info(f"[CAPABILITY-CATALOG] capabilities={cap_count} approval_actions={approval_actions_count} lang={lang}")
+        
+        documents = 0
+        try:
+            from api.rag_models import RAGDocument
+            documents = db.query(RAGDocument).filter(RAGDocument.session_id == contract.session_id).count()
+        except Exception:
+            pass
+
+        catalog_lines = []
+        if lang == "ES":
+            catalog_lines.append("\n### CATÁLOGO DE CAPACIDADES DISPONIBLES")
+            catalog_lines.append("Solo puedes invocar las siguientes capacidades y acciones:")
+            for cap_id, cap in registry.capabilities.items():
+                status = cap.check(settings)
+                if not status.enabled:
+                    continue
+                if not status.available:
+                    continue
+                if cap_id == "rag" and documents == 0:
+                    continue
+                status_str = "activo" if status.enabled else "inactivo"
+                actions_list = []
+                for act_name in (cap.actions or {}):
+                    requires_app = " (Requiere aprobación)" if cap.requires_approval(act_name) else ""
+                    actions_list.append(f"`{act_name}`{requires_app}")
+                actions_str = ", ".join(actions_list) if actions_list else "ninguna"
+                catalog_lines.append(f"- **{cap_id}** [Estado: {status_str}] - Acciones: {actions_str}")
+        else:
+            catalog_lines.append("\n### AVAILABLE CAPABILITIES CATALOG")
+            catalog_lines.append("You are only allowed to invoke the following capabilities and actions:")
+            for cap_id, cap in registry.capabilities.items():
+                status = cap.check(settings)
+                if not status.enabled:
+                    continue
+                if not status.available:
+                    continue
+                if cap_id == "rag" and documents == 0:
+                    continue
+                status_str = "active" if status.enabled else "inactive"
+                actions_list = []
+                for act_name in (cap.actions or {}):
+                    requires_app = " (Requires Approval)" if cap.requires_approval(act_name) else ""
+                    actions_list.append(f"`{act_name}`{requires_app}")
+                actions_str = ", ".join(actions_list) if actions_list else "none"
+                catalog_lines.append(f"- **{cap_id}** [Status: {status_str}] - Actions: {actions_str}")
+                
+        capability_catalog = "\n".join(catalog_lines) + "\n"
+        system_prompt = f"{system_prompt}{capability_catalog}"
+
+
         # 8. Inject Coordinator context
         runtime_context = self.build_runtime_context_block(predicted_wf, resolved_skill)
         if runtime_context:

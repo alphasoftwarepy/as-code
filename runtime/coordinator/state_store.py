@@ -139,3 +139,27 @@ class LightweightStateStore:
         except Exception as e:
             logger.error(f"[STATE-STORE] Error al persistir decisión de continuidad: {e}")
             return False
+
+
+class PendingSkillStore:
+    """Encapsulates session pending skill states in process memory."""
+    def __init__(self):
+        self._store = {}
+
+    def register_pending(self, session_id: str, capability_id: str) -> None:
+        self._store[session_id] = capability_id
+
+    def get_pending(self, session_id: str) -> Optional[str]:
+        return self._store.get(session_id)
+
+    def clear_pending(self, session_id: str) -> None:
+        self._store.pop(session_id, None)
+
+
+_global_pending_skill_store = PendingSkillStore()
+
+
+def get_pending_skill_store() -> PendingSkillStore:
+    """Access the global PendingSkillStore singleton."""
+    return _global_pending_skill_store
+

@@ -20,6 +20,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -33,11 +34,13 @@ from api.rag_routes import rag_router
 from api.capability_routes import capabilities_router
 from api.skill_routes import skills_router
 from api.memory_routes import memory_router
+from api.project_routes import project_router
 from config.settings import get_settings
 from core.engine import EngineManager
 from core.hardware import detect_hardware
 from providers.litert_cli import LiteRTCLIProvider
 from providers.litert_compiled import LiteRTCompiledProvider
+from providers.litert_embedded import LiteRTEmbeddedProvider
 from providers.registry import ProviderRegistry
 from router.smart_router import SmartRouter
 
@@ -84,6 +87,11 @@ async def lifespan(app: FastAPI):
     )
     registry.register("litert_compiled", compiled_provider)
 
+    embedded_provider = LiteRTEmbeddedProvider(
+        models_dir=settings.models_dir,
+    )
+    registry.register("litert_embedded", embedded_provider)
+
     # 4. Activate the configured provider
     await registry.set_active(settings.active_provider)
 
@@ -93,6 +101,7 @@ async def lifespan(app: FastAPI):
         hardware_info=hardware,
         max_vram_mb=settings.max_vram_usage_mb,
         model_unload_timeout=settings.model_unload_timeout_sec,
+        model_absolute_lifetime=settings.model_absolute_lifetime_sec,
         anti_oom_threshold_mb=settings.anti_oom_threshold_mb,
     )
 
@@ -116,19 +125,27 @@ async def lifespan(app: FastAPI):
     # 8. Start engine
     await engine.start()
 
+    # 4.0.2: Start non-blocking base chat model warmup in background
+    asyncio.create_task(engine.warmup_model("chat"))
+
     # Create uploads directory for document sessions
     from pathlib import Path
     Path(settings.uploads_dir).mkdir(parents=True, exist_ok=True)
     Path(Path(settings.uploads_dir) / "rag").mkdir(parents=True, exist_ok=True)
 
+    # ── Database Initialization ────────────────────────────────
+    from api.database import init_db
+    try:
+        init_db(settings.rag_db_path)
+        logger.info("Database initialized successfully ✓")
+    except Exception as db_err:
+        logger.error(f"Database initialization failed: {db_err}")
+
     # ── RAG NotebookLM Pipeline ────────────────────────────────
     if settings.enable_rag_mode:
         logger.info("Initializing RAG NotebookLM pipeline...")
         try:
-            from api.database import init_db
             from api.rag_service import build_rag_service
-
-            init_db(settings.rag_db_path)
 
             rag_service = build_rag_service(
                 faiss_index_path=settings.faiss_index_path,
@@ -158,6 +175,23 @@ async def lifespan(app: FastAPI):
     from runtime.memory.manager import WorkingMemoryManager
     app.state.memory = WorkingMemoryManager()
     logger.info("Working memory service ready ✓")
+
+    # ── Project Manager ─────────────────────────────────────────
+    from runtime.projects.manager import ProjectManager
+    from api.database import get_session
+    project_mgr = ProjectManager()
+    app.state.project_manager = project_mgr
+    try:
+        db = get_session()
+        try:
+            project_mgr.ensure_default_project(db)
+            logger.info("Default General project initialization complete ✓")
+        except Exception as e:
+            logger.error(f"Failed to ensure default project: {e}")
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Could not acquire database session for project initialization: {e}")
 
     # Store in app state (accessible from routes)
     app.state.engine = engine
@@ -218,6 +252,8 @@ app.include_router(skills_router)
 logger.info("Skills router mounted at /v1/skills ✓")
 app.include_router(memory_router)
 logger.info("Memory router mounted at /v1/memory ✓")
+app.include_router(project_router)
+logger.info("Project router mounted at /v1/projects ✓")
 
 
 # ── UI Routes ──────────────────────────────────────────────────

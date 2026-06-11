@@ -7,6 +7,12 @@ class BaseCapability:
     category: str
     version: str = "1.0.0"
     scopes: list[str] = []
+    actions: dict[str, str] = {}
+    approval_required_actions: list[str] = []
+
+    def requires_approval(self, action: str) -> bool:
+        """Check if a capability action requires explicit user approval."""
+        return action in self.approval_required_actions
 
     def check(self, settings, app_state=None) -> CapabilityStatus:
         """Perform lightweight validation of the capability and return its status.

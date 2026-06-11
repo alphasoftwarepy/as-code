@@ -9,6 +9,10 @@ class TerminalCapability(BaseCapability):
     category = "developer"
     version = "1.0.0"
     scopes = ["terminal.execute"]
+    actions = {
+        "execute": "Run terminal/shell command on the host system"
+    }
+    approval_required_actions = ["execute"]
 
     def check(self, settings, app_state=None) -> CapabilityStatus:
         available = True

@@ -192,8 +192,21 @@ class BaseRAGPipeline:
             logger.info("[RAG-SCOPE] session_id=None | documents=0 | RAG=OFF")
             return []
 
-        # Find documents matching session_id
-        session_docs = db.query(RAGDocument).filter(RAGDocument.session_id == session_id).all()
+        # Find documents matching session_id or its associated project
+        from api.project_models import ProjectChat, ProjectDocument
+        
+        chat_proj = db.query(ProjectChat).filter(ProjectChat.session_id == session_id).first()
+        if chat_proj:
+            # Query documents mapped to the session or the project
+            proj_doc_ids_query = db.query(ProjectDocument.document_id).filter(
+                ProjectDocument.project_id == chat_proj.project_id
+            )
+            session_docs = db.query(RAGDocument).filter(
+                (RAGDocument.session_id == session_id) | RAGDocument.id.in_(proj_doc_ids_query)
+            ).all()
+        else:
+            session_docs = db.query(RAGDocument).filter(RAGDocument.session_id == session_id).all()
+
         doc_count = len(session_docs)
         if doc_count == 0:
             logger.info(f"[RAG-SCOPE] session_id={session_id} | documents=0 | RAG=OFF")

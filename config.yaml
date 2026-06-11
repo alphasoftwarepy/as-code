@@ -25,7 +25,7 @@ models:
     id: "gemma-chat"
     file: "models/gemma/gemma-3n-E2B-it-int4.litertlm"
     type: "general"
-    provider: "litert_cli"
+    provider: "litert_embedded"
     params_billions: 2.0
     estimated_vram_mb: 1500
     quantization: "int4"
@@ -41,7 +41,7 @@ models:
     id: "gemma-code"
     file: "models/gemma/gemma-3n-E2B-it-int4.litertlm"
     type: "coding"
-    provider: "litert_cli"
+    provider: "litert_embedded"
     params_billions: 2.0
     estimated_vram_mb: 1500
     quantization: "int4"
@@ -55,7 +55,7 @@ models:
     id: "gemma-reasoning"
     file: "models/gemma/gemma-4-E4B-it.litertlm"
     type: "reasoning"
-    provider: "litert_cli"
+    provider: "litert_embedded"
     params_billions: 4.0
     estimated_vram_mb: 4000
     quantization: "int8"
@@ -68,7 +68,7 @@ models:
 
 # Provider configuration
 providers:
-  active: "litert_cli"
+  active: "litert_embedded"
 
   litert_cli:
     backend: "gpu"
@@ -123,3 +123,8 @@ inference:
   top_k: 40
   top_p: 0.95
   max_context_length: 2048
+
+# Lifecycle policies (Phase 4.0.4)
+lifecycle:
+  model_unload_timeout_sec: 300.0
+  model_absolute_lifetime_sec: 1800.0
