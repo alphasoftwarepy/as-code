@@ -26,6 +26,7 @@ def get_nvidia_gpu_info() -> Optional[dict]:
             ],
             capture_output=True,
             text=True,
+            errors="replace",
             timeout=10,
         )
         if result.returncode == 0 and result.stdout.strip():

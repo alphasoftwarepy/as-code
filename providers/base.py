@@ -26,6 +26,7 @@ class ProviderType(str, Enum):
     LITERT_CLI = "litert_cli"
     LITERT_COMPILED = "litert_compiled"
     LITERT_NATIVE = "litert_native"
+    LLAMACPP = "llamacpp"
     NPU = "npu"
 
 

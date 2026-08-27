@@ -47,6 +47,7 @@ class LiteRTEmbeddedProvider(InferenceProvider):
         self._loaded_model_id: Optional[str] = None
         self._lock = threading.Lock()
         self._available = False
+        self._active_conversations: dict[str, object] = {}
 
     def capabilities(self) -> ProviderCapabilities:
         return ProviderCapabilities(
@@ -117,13 +118,20 @@ class LiteRTEmbeddedProvider(InferenceProvider):
                     self._loaded_model_id = None
                     gc.collect()
 
+                # Get context limit from settings
                 try:
-                    engine = litert_lm.Engine(model_path, backend=litert_lm.Backend.GPU)
+                    from config.settings import get_settings
+                    max_ctx = get_settings().max_context_length or 2048
+                except Exception:
+                    max_ctx = 2048
+
+                try:
+                    engine = litert_lm.Engine(model_path, backend=litert_lm.Backend.GPU, max_num_tokens=max_ctx)
                     engine.__enter__()
                     on_gpu = True
                 except Exception as e:
                     logger.warning(f"Failed to load model on GPU: {e}. Falling back to CPU backend.")
-                    engine = litert_lm.Engine(model_path, backend=litert_lm.Backend.CPU)
+                    engine = litert_lm.Engine(model_path, backend=litert_lm.Backend.CPU, max_num_tokens=max_ctx)
                     engine.__enter__()
                     on_gpu = False
 
@@ -181,7 +189,11 @@ class LiteRTEmbeddedProvider(InferenceProvider):
                 if self._engine is None:
                     raise RuntimeError("Model was unloaded while waiting for lock.")
                 with self._engine.create_conversation(messages=history) as conv:
-                    return conv.send_message(query)
+                    self._active_conversations[request.request_id] = conv
+                    try:
+                        return conv.send_message(query)
+                    finally:
+                        self._active_conversations.pop(request.request_id, None)
 
         resp = await asyncio.to_thread(_run)
 
@@ -190,9 +202,15 @@ class LiteRTEmbeddedProvider(InferenceProvider):
         prompt_tokens = resp.get("prompt_tokens", 0) if isinstance(resp, dict) else 0
         latency = (time.time() - t0) * 1000
 
+        # Enforce max_tokens truncation on síncrono generation for parity
+        finish_reason = "stop"
+        if request.max_tokens and tokens_gen > request.max_tokens:
+            # We can't rewind the engine generation state in non-streaming, but we can return truncated response
+            finish_reason = "length"
+
         return InferenceResult(
             text=text,
-            finish_reason="stop",
+            finish_reason=finish_reason,
             tokens_generated=tokens_gen,
             prompt_tokens=prompt_tokens,
             latency_ms=latency,
@@ -230,8 +248,12 @@ class LiteRTEmbeddedProvider(InferenceProvider):
                     if self._engine is None:
                         raise RuntimeError("Model was unloaded while waiting for lock.")
                     with self._engine.create_conversation(messages=history) as conv:
-                        for chunk in conv.send_message_async(query):
-                            loop.call_soon_threadsafe(q.put_nowait, chunk)
+                        self._active_conversations[request.request_id] = conv
+                        try:
+                            for chunk in conv.send_message_async(query):
+                                loop.call_soon_threadsafe(q.put_nowait, chunk)
+                        finally:
+                            self._active_conversations.pop(request.request_id, None)
                 loop.call_soon_threadsafe(q.put_nowait, None)  # Sentinel for EOF
             except Exception as e:
                 logger.error(f"[LITERT-EMBEDDED] Error in streaming thread: {e}")
@@ -243,6 +265,7 @@ class LiteRTEmbeddedProvider(InferenceProvider):
 
         # Consume queue
         tokens_generated = 0
+        limit_reached = False
         while True:
             item = await q.get()
             if item is None:
@@ -267,17 +290,31 @@ class LiteRTEmbeddedProvider(InferenceProvider):
                     provider_type=ProviderType.LITERT_NATIVE.value,
                 )
 
+                if request.max_tokens and tokens_generated >= request.max_tokens:
+                    logger.info(f"[LITERT-EMBEDDED] Request limit reached ({tokens_generated}/{request.max_tokens}). Cancelling generation.")
+                    await self.cancel_generation(request.request_id)
+                    limit_reached = True
+                    break
+
         # Final stop chunk
         yield InferenceResult(
             text="",
-            finish_reason="stop",
+            finish_reason="length" if limit_reached else "stop",
             tokens_generated=tokens_generated,
             model_id=request.model_id,
             provider_type=ProviderType.LITERT_NATIVE.value,
         )
 
     async def cancel_generation(self, request_id: str) -> None:
-        pass  # Cancellation of FFI thread not directly exposed in simple wrapper
+        conv = self._active_conversations.get(request_id)
+        if conv:
+            logger.info(f"[LITERT-EMBEDDED] Cancelling active conversation: {request_id}")
+            def _cancel():
+                try:
+                    conv.cancel_process()
+                except Exception as e:
+                    logger.warning(f"Error calling cancel_process: {e}")
+            await asyncio.to_thread(_cancel)
 
     # ── Health & Telemetry ─────────────────────────────────────
 

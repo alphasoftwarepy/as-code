@@ -50,7 +50,7 @@ def is_memory_pressure() -> bool:
         try:
             result = subprocess.run(
                 ["wmic", "OS", "get", "FreePhysicalMemory", "/format:list"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True, text=True, errors="replace", timeout=5,
             )
             for line in result.stdout.strip().split("\n"):
                 if line.strip().startswith("FreePhysicalMemory="):

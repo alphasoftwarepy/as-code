@@ -25,7 +25,7 @@ models:
     id: "gemma-chat"
     file: "models/gemma/gemma-3n-E2B-it-int4.litertlm"
     type: "general"
-    provider: "litert_embedded"
+    provider: "litert_cli"
     params_billions: 2.0
     estimated_vram_mb: 1500
     quantization: "int4"
@@ -41,7 +41,7 @@ models:
     id: "gemma-code"
     file: "models/gemma/gemma-3n-E2B-it-int4.litertlm"
     type: "coding"
-    provider: "litert_embedded"
+    provider: "litert_cli"
     params_billions: 2.0
     estimated_vram_mb: 1500
     quantization: "int4"
@@ -55,20 +55,56 @@ models:
     id: "gemma-reasoning"
     file: "models/gemma/gemma-4-E4B-it.litertlm"
     type: "reasoning"
-    provider: "litert_embedded"
+    provider: "litert_cli"
     params_billions: 4.0
-    estimated_vram_mb: 4000
-    quantization: "int8"
+    estimated_vram_mb: 3660
+    quantization: "int4"
     capabilities:
       - architecture
       - analysis
       - tradeoffs
       - reasoning
-    source: "https://huggingface.co/litert-community/gemma-3n-E2B-it-litert-lm"
+    source: "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm"
+
+  moe_large:
+    id: "qwen-moe"
+    file: "moe_poc/models/qwen1.5-moe-a2.7b-q4_k_m.gguf"
+    type: "moe"
+    provider: "llamacpp"
+    params_billions: 14.3
+    estimated_vram_mb: 3893
+    quantization: "q4_k_m"
+    capabilities:
+      - conversation
+      - coding
+      - reasoning
+      - architecture
+      - analysis
+
+  olmoe:
+    id: "olmoe"
+    file: "moe_poc/models/olmoe-1b-7b-0924-instruct-q4_k_m.gguf"
+    type: "moe_research"
+    provider: "llamacpp"
+    params_billions: 6.9
+    estimated_vram_mb: 3900
+    quantization: "q4_k_m"
+    capabilities:
+      - conversation
+      - coding
+      - reasoning
+      - analysis
 
 # Provider configuration
 providers:
-  active: "litert_embedded"
+  active: "litert_cli"
+
+  llamacpp:
+    binary_path: "moe_poc/bins/llama-server.exe"
+    host: "127.0.0.1"
+    port: 8766
+    n_gpu_layers: 10
+    context_size: 2048
 
   litert_cli:
     backend: "gpu"

@@ -102,7 +102,7 @@ def test_project_chats():
         assert chats[0].id == chat.id
 
         # 4. Delete chat
-        success = manager.delete_chat(db, chat.id)
+        success = manager.delete_chat_by_session(db, session_id)
         assert success is True
         assert manager.get_chat_by_session(db, session_id) is None
 

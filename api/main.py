@@ -41,6 +41,7 @@ from core.hardware import detect_hardware
 from providers.litert_cli import LiteRTCLIProvider
 from providers.litert_compiled import LiteRTCompiledProvider
 from providers.litert_embedded import LiteRTEmbeddedProvider
+from providers.llamacpp_provider import LlamaCppProvider
 from providers.registry import ProviderRegistry
 from router.smart_router import SmartRouter
 
@@ -91,6 +92,16 @@ async def lifespan(app: FastAPI):
         models_dir=settings.models_dir,
     )
     registry.register("litert_embedded", embedded_provider)
+
+    llamacpp_cfg = settings._config.get("providers", {}).get("llamacpp", {})
+    llamacpp_provider = LlamaCppProvider(
+        server_bin_path=llamacpp_cfg.get("binary_path", r"C:\as-code\moe_poc\bins\llama-server.exe"),
+        host=llamacpp_cfg.get("host", "127.0.0.1"),
+        port=llamacpp_cfg.get("port", 8766),
+        n_gpu_layers=llamacpp_cfg.get("n_gpu_layers", 10),
+        context_size=llamacpp_cfg.get("context_size", 2048),
+    )
+    registry.register("llamacpp", llamacpp_provider)
 
     # 4. Activate the configured provider
     await registry.set_active(settings.active_provider)

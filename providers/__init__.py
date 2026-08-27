@@ -11,6 +11,7 @@ No API, router, or UI layer changes required when switching providers.
 """
 
 from providers.base import InferenceProvider, InferenceResult, ProviderCapabilities
+from providers.llamacpp_provider import LlamaCppProvider
 from providers.registry import ProviderRegistry
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "InferenceResult",
     "ProviderCapabilities",
     "ProviderRegistry",
+    "LlamaCppProvider",
 ]

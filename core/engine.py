@@ -242,15 +242,17 @@ class EngineManager:
         await self._check_resources(config["estimated_vram_mb"])
 
         # If another model is loaded and we're in single-model mode,
-        # unload it first
+        # unload it across all providers in the registry first to free 100% VRAM
         if self.hardware.tier != HardwareTier.PERFORMANCE:
-            loaded = await provider.loaded_models()
-            for loaded_id in loaded:
-                if loaded_id != model_id:
-                    logger.info(f"[MODEL-SWAP] Swapping active model: {loaded_id} → {model_id}")
-                    await provider.unload_model(loaded_id)
-                    self._loaded_at.pop(loaded_id, None)
-                    self._last_used.pop(loaded_id, None)
+            all_providers = self.registry.get_all_providers()
+            for p_id, p_instance in all_providers.items():
+                loaded = await p_instance.loaded_models()
+                for loaded_id in loaded:
+                    if loaded_id != model_id or p_instance != provider:
+                        logger.info(f"[MODEL-SWAP] Swapping active model: {loaded_id} ({p_id}) → {model_id} ({provider_id})")
+                        await p_instance.unload_model(loaded_id)
+                        self._loaded_at.pop(loaded_id, None)
+                        self._last_used.pop(loaded_id, None)
 
         # Load the model
         logger.info(f"[MODEL-LOAD] Ensuring model is loaded: {model_id}")

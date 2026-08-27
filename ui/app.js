@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
         messagesContainer: document.getElementById('messagesContainer'),
         welcomeScreen: document.getElementById('welcomeScreen'),
         modelSelect: document.getElementById('modelSelect'),
+        quickModelSelect: document.getElementById('quickModelSelect'),
         presetSelect: document.getElementById('presetSelect'),
         temperatureSlider: document.getElementById('temperatureSlider'),
         tempValue: document.getElementById('tempValue'),
@@ -26,9 +27,12 @@ document.addEventListener('DOMContentLoaded', () => {
         telemetryBar: document.getElementById('telemetryBar'),
 
         // Telemetry values
+        telMode: document.getElementById('telMode'),
         telRam: document.getElementById('telRam'),
         telVram: document.getElementById('telVram'),
         telTps: document.getElementById('telTps'),
+        telTtft: document.getElementById('telTtft'),
+        telTokens: document.getElementById('telTokens'),
         telModel: document.getElementById('telModel'),
         telProvider: document.getElementById('telProvider'),
     };
@@ -90,6 +94,17 @@ document.addEventListener('DOMContentLoaded', () => {
     elements.temperatureSlider.addEventListener('input', (e) => {
         elements.tempValue.textContent = e.target.value;
     });
+
+    function updateModelSelection(val) {
+        if (elements.modelSelect) elements.modelSelect.value = val;
+        if (elements.quickModelSelect) elements.quickModelSelect.value = val;
+        if (elements.telMode) {
+            elements.telMode.textContent = val === 'auto' ? 'AUTO' : 'MANUAL';
+            elements.telMode.className = val === 'auto' ? 'telemetry-value text-accent-400 font-bold' : 'telemetry-value text-emerald-400 font-bold';
+        }
+    }
+    elements.quickModelSelect?.addEventListener('change', (e) => updateModelSelection(e.target.value));
+    elements.modelSelect?.addEventListener('change', (e) => updateModelSelection(e.target.value));
 
     elements.presetSelect?.addEventListener('change', (e) => {
         const presetMap = {
@@ -167,8 +182,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let fullText = '';
         const startTime = performance.now();
+        let firstTokenTime = null;
         let tokenCount = 0;
         let wasUserAborted = false;  // true ONLY when user clicked Stop or pressed Escape
+        let providerUsed = '—';
 
         const requestBody = {
             model: elements.modelSelect.value,
@@ -239,6 +256,14 @@ document.addEventListener('DOMContentLoaded', () => {
                                 contentNode.innerHTML = ''; // Remove typing cursor on first token
                             }
 
+                            if (firstTokenTime === null && delta) {
+                                firstTokenTime = performance.now();
+                                const ttftMs = (firstTokenTime - startTime).toFixed(0);
+                                if (elements.telTtft) elements.telTtft.textContent = `${ttftMs} ms`;
+                            }
+
+                            if (data.provider) providerUsed = data.provider;
+
                             if (data.model && !modelUsed) {
                                 modelUsed = data.model;
                                 updateRoutingIndicator(modelUsed);
@@ -250,6 +275,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                             // Basic token counting heuristic
                             tokenCount += delta.split(/\s+/).filter(x => x).length;
+                            if (elements.telTokens) elements.telTokens.textContent = tokenCount;
 
                             // Calculate TPS every ~10 tokens to avoid UI thrashing
                             if (tokenCount % 10 === 0) {
@@ -283,10 +309,38 @@ document.addEventListener('DOMContentLoaded', () => {
             // Finalize HTML
             contentNode.innerHTML = formatMarkdown(fullText);
 
-            // Final TPS
+            // Final TPS and TTFT
             const elapsedSec = (performance.now() - startTime) / 1000;
-            if (elapsedSec > 0) {
-                elements.telTps.textContent = (tokenCount / elapsedSec).toFixed(1);
+            const finalTps = elapsedSec > 0 ? (tokenCount / elapsedSec).toFixed(1) : '—';
+            const ttftText = firstTokenTime ? `${(firstTokenTime - startTime).toFixed(0)} ms` : '—';
+            const modeText = elements.modelSelect.value === 'auto' ? 'AUTO' : 'MANUAL';
+            const totalDurationSec = elapsedSec.toFixed(2);
+
+            if (elements.telTps) {
+                elements.telTps.textContent = finalTps;
+            }
+            if (elements.telTokens) {
+                elements.telTokens.textContent = tokenCount;
+            }
+
+            // Append live metadata footer badge
+            if (fullText && !wasUserAborted) {
+                const metaBadge = document.createElement('div');
+                metaBadge.className = 'mt-3 pt-2 border-t border-surface-800/60 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-surface-400/75 select-none font-mono';
+                metaBadge.innerHTML = `
+                    <span class="text-accent-400 font-semibold">${modelUsed || elements.modelSelect.value}</span>
+                    <span>•</span>
+                    <span>${providerUsed} (${modeText})</span>
+                    <span>•</span>
+                    <span>${tokenCount} tok</span>
+                    <span>•</span>
+                    <span>TTFT: ${ttftText}</span>
+                    <span>•</span>
+                    <span class="text-emerald-400 font-medium">${finalTps} tok/s</span>
+                    <span>•</span>
+                    <span>${totalDurationSec}s</span>
+                `;
+                contentNode.appendChild(metaBadge);
             }
 
             state.chatHistory.push({ role: 'assistant', content: fullText });

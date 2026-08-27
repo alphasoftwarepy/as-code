@@ -127,7 +127,7 @@ def _detect_cpu() -> CPUInfo:
             try:
                 result = subprocess.run(
                     ["wmic", "cpu", "get", "Name", "/format:list"],
-                    capture_output=True, text=True, timeout=5,
+                    capture_output=True, text=True, errors="replace", timeout=5,
                 )
                 for line in result.stdout.strip().split("\n"):
                     if line.startswith("Name="):
@@ -143,7 +143,7 @@ def _detect_cpu() -> CPUInfo:
                         "powershell", "-Command",
                         "[System.Runtime.Intrinsics.X86.Avx.IsSupported]"
                     ],
-                    capture_output=True, text=True, timeout=5,
+                    capture_output=True, text=True, errors="replace", timeout=5,
                 )
                 cpu.has_avx = "True" in result.stdout
             except (subprocess.TimeoutExpired, FileNotFoundError):
@@ -181,7 +181,7 @@ def _detect_memory() -> MemoryInfo:
                     "TotalVisibleMemorySize,FreePhysicalMemory",
                     "/format:list",
                 ],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True, text=True, errors="replace", timeout=5,
             )
             for line in result.stdout.strip().split("\n"):
                 line = line.strip()
@@ -213,7 +213,7 @@ def _detect_gpu() -> GPUInfo:
                 "--query-gpu=name,memory.total,memory.free,driver_version",
                 "--format=csv,noheader,nounits",
             ],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True, text=True, errors="replace", timeout=10,
         )
 
         if result.returncode == 0 and result.stdout.strip():
@@ -239,7 +239,7 @@ def _detect_gpu() -> GPUInfo:
                     "wmic", "path", "win32_VideoController", "get",
                     "Name,AdapterRAM", "/format:list",
                 ],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True, text=True, errors="replace", timeout=5,
             )
             for line in result.stdout.strip().split("\n"):
                 line = line.strip()
@@ -320,7 +320,7 @@ def get_vram_free_mb() -> int:
                 "--query-gpu=memory.free",
                 "--format=csv,noheader,nounits",
             ],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True, text=True, errors="replace", timeout=5,
         )
         if result.returncode == 0:
             return int(float(result.stdout.strip()))
@@ -341,7 +341,7 @@ def get_ram_available_mb() -> int:
         if platform.system() == "Windows":
             result = subprocess.run(
                 ["wmic", "OS", "get", "FreePhysicalMemory", "/format:list"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True, text=True, errors="replace", timeout=5,
             )
             for line in result.stdout.strip().split("\n"):
                 if line.strip().startswith("FreePhysicalMemory="):

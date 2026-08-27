@@ -75,3 +75,11 @@ data/*
 !data/.gitkeep
 uploads/
 *.db
+
+# MoE PoC - Non-essential / Heavy files (only code & docs kept)
+moe_poc/bins/
+moe_poc/models/
+moe_poc/data/
+moe_poc/*.log
+moe_poc/*.json
+moe_poc/*.zip

@@ -110,6 +110,18 @@
             <header id="header" class="header-bar">
                 <div class="flex items-center gap-3">
                     <span class="text-xs text-surface-200/50 font-medium tracking-wide">Workspace</span>
+
+                    <!-- Primary Model / Backend Selector (Phase P2) -->
+                    <div class="flex items-center gap-1.5 bg-surface-800/90 border border-surface-700/60 rounded-lg px-2.5 py-1 text-xs shadow-sm">
+                        <span class="text-[10px] text-accent-400 font-bold tracking-wider uppercase">MODELO:</span>
+                        <select id="quickModelSelect" class="bg-transparent text-surface-100 text-xs font-semibold border-none outline-none cursor-pointer focus:ring-0">
+                            <option value="auto" class="bg-surface-900 text-surface-100">AUTO (Coordinator)</option>
+                            <option value="chat" class="bg-surface-900 text-surface-100">Gemma E2B (LiteRT)</option>
+                            <option value="reasoning" class="bg-surface-900 text-surface-100">Gemma E4B (LiteRT)</option>
+                            <option value="olmoe" class="bg-surface-900 text-surface-100">OLMoE (AS-Core MoE)</option>
+                            <option value="moe_large" class="bg-surface-900 text-surface-100">Qwen MoE — llama.cpp</option>
+                        </select>
+                    </div>
                 </div>
 
         <div class="flex items-center gap-2">
@@ -152,16 +164,8 @@
     <!-- ── Telemetry Bar (collapsible) ──────────────────────── -->
     <div id="telemetryBar" class="telemetry-bar hidden">
         <div class="telemetry-item">
-            <span class="telemetry-label">RAM</span>
-            <span id="telRam" class="telemetry-value">—</span>
-        </div>
-        <div class="telemetry-item">
-            <span class="telemetry-label">VRAM</span>
-            <span id="telVram" class="telemetry-value">—</span>
-        </div>
-        <div class="telemetry-item">
-            <span class="telemetry-label">tok/s</span>
-            <span id="telTps" class="telemetry-value">—</span>
+            <span class="telemetry-label">Mode</span>
+            <span id="telMode" class="telemetry-value text-accent-400 font-bold">AUTO</span>
         </div>
         <div class="telemetry-item">
             <span class="telemetry-label">Model</span>
@@ -171,6 +175,26 @@
             <span class="telemetry-label">Provider</span>
             <span id="telProvider" class="telemetry-value">—</span>
         </div>
+        <div class="telemetry-item">
+            <span class="telemetry-label">TTFT</span>
+            <span id="telTtft" class="telemetry-value">—</span>
+        </div>
+        <div class="telemetry-item">
+            <span class="telemetry-label">tok/s</span>
+            <span id="telTps" class="telemetry-value">—</span>
+        </div>
+        <div class="telemetry-item">
+            <span class="telemetry-label">Tokens</span>
+            <span id="telTokens" class="telemetry-value">—</span>
+        </div>
+        <div class="telemetry-item">
+            <span class="telemetry-label">RAM</span>
+            <span id="telRam" class="telemetry-value">—</span>
+        </div>
+        <div class="telemetry-item">
+            <span class="telemetry-label">VRAM</span>
+            <span id="telVram" class="telemetry-value">—</span>
+        </div>
     </div>
 
     <!-- ── Settings Panel (collapsible) ─────────────────────── -->
@@ -178,12 +202,14 @@
         <div class="settings-grid">
             <!-- Model Selector -->
             <div class="setting-group">
-                <label class="setting-label" for="modelSelect">Model</label>
+                <label class="setting-label" for="modelSelect">Model / Backend</label>
                 <select id="modelSelect" class="setting-select">
-                    <option value="auto">Auto (Smart Router)</option>
-                    <option value="chat">Chat — General Assistant</option>
-                    <option value="code">Code — Programming Assistant</option>
-                    <option value="reasoning">Reasoning — Deep Analysis</option>
+                    <option value="auto">AUTO (Coordinator Smart Router)</option>
+                    <option value="chat">Gemma E2B — LiteRT (General Chat)</option>
+                    <option value="code">Gemma Code — LiteRT (Coding)</option>
+                    <option value="reasoning">Gemma E4B — LiteRT (Reasoning)</option>
+                    <option value="olmoe">OLMoE 1B-7B — AS-Core MoE (GPU-First)</option>
+                    <option value="moe_large">Qwen MoE 14.3B — llama.cpp (CUDA)</option>
                 </select>
             </div>
 

@@ -198,6 +198,10 @@ class ProviderRegistry:
         """Get a specific provider by ID."""
         return self._providers.get(provider_id)
 
+    def get_all_providers(self) -> dict[str, InferenceProvider]:
+        """Get a copy of all registered providers."""
+        return dict(self._providers)
+
     # ── Lifecycle ──────────────────────────────────────────────
 
     async def shutdown_all(self) -> None:
