@@ -1,14 +1,14 @@
 <#
 .SYNOPSIS
-    AS Code Run Script
+    AS Core Run Script
 .DESCRIPTION
-    Starts the AS Code Local AI Server.
+    Starts the AS Core Local AI Server.
 #>
 
 $ErrorActionPreference = "Stop"
 
 Write-Host "=========================================" -ForegroundColor Cyan
-Write-Host "         Starting AS Code Server         " -ForegroundColor Cyan
+Write-Host "         Starting AS Core Server         " -ForegroundColor Cyan
 Write-Host "      Fast Local AI for Real Hardware    " -ForegroundColor Cyan
 Write-Host "=========================================" -ForegroundColor Cyan
 

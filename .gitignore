@@ -57,6 +57,9 @@ tmp/
 *.bak
 tempCodeRunnerFile.py
 .pdm-build/
+temp_skills/*
+!temp_skills/.gitkeep
+
 
 # OS
 Thumbs.db
