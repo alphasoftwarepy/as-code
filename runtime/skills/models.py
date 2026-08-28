@@ -8,6 +8,7 @@ class SkillManifest(BaseModel):
     required_scopes: List[str] = []
     enabled: bool = True
     prompt_family: Optional[str] = None
+    uses_capabilities: bool = False
 
 class SkillStatus(BaseModel):
     id: str

@@ -331,6 +331,7 @@ async def chat_completions(
 
     from runtime.coordinator.agent import AgentControlRunner
     agent_runner = AgentControlRunner(engine)
+    capability_gate_open = manifest.capability_gate_open if manifest else False
 
     if body.stream:
         # Streaming response (SSE) via AgentControlRunner
@@ -340,6 +341,7 @@ async def chat_completions(
             inference_request=inference_request,
             app_state=request.app,
             session_id=session_id,
+            capability_gate_open=capability_gate_open,
         )
 
         # Apply state mutations post-inference dispatch (Subfase 1D)
@@ -369,6 +371,7 @@ async def chat_completions(
             inference_request=inference_request,
             app_state=request.app,
             session_id=session_id,
+            capability_gate_open=capability_gate_open,
         )
         elapsed_ms = (time.perf_counter() - start) * 1000
 

@@ -34,6 +34,22 @@ def find_json_blocks(text: str) -> List[str]:
                         start = -1
     return blocks
 
+KNOWN_CAPABILITY_IDS: frozenset = frozenset({"documents", "rag", "git", "terminal"})
+
+def _validate_call_envelope(val: dict) -> Optional[dict]:
+    """Validate schema and whitelist for capability call envelope."""
+    if not isinstance(val, dict):
+        return None
+    cap = val.get("capability")
+    act = val.get("action")
+    if not isinstance(cap, str) or not cap.strip():
+        return None
+    if not isinstance(act, str) or not act.strip():
+        return None
+    if cap not in KNOWN_CAPABILITY_IDS:
+        return None
+    return val
+
 def parse_capability_call(text: str) -> Optional[dict]:
     """Parse assistant text to find a structured capability json_call block.
     
@@ -48,8 +64,9 @@ def parse_capability_call(text: str) -> Optional[dict]:
     if match:
         try:
             val = json.loads(match.group(1))
-            if "capability" in val and "action" in val:
-                return val
+            validated = _validate_call_envelope(val)
+            if validated:
+                return validated
         except Exception:
             pass
 
@@ -58,8 +75,9 @@ def parse_capability_call(text: str) -> Optional[dict]:
     for block in blocks:
         try:
             val = json.loads(block)
-            if isinstance(val, dict) and "capability" in val and "action" in val:
-                return val
+            validated = _validate_call_envelope(val)
+            if validated:
+                return validated
         except Exception:
             pass
             

@@ -215,10 +215,11 @@ class PureCoordinator:
 
         # 6. Root Prompt (via Prompt Family resolution)
         prompt_family = None
+        skill_manifest = None
         if resolved_skill and skill_service:
-            manifest = skill_service.get_skill_manifest(resolved_skill)
-            if manifest:
-                prompt_family = manifest.prompt_family
+            skill_manifest = skill_service.get_skill_manifest(resolved_skill)
+            if skill_manifest:
+                prompt_family = skill_manifest.prompt_family
 
         if contract.model_id == "code" or resolved_skill == "programming":
             prompt_family = "SOFTWARE_PROMPT"
@@ -233,94 +234,123 @@ class PureCoordinator:
             if skill_prompt:
                 system_prompt = f"{system_prompt}\n\n{skill_prompt}"
 
-        # 7.5 Inject Capability Instructions (Cognitive Prompt for Phase 3.5)
-        if lang == "ES":
-            capability_instructions = (
-                "\n\n### PROTOCOLO DE INVOCACIÓN DE CAPACIDADES\n"
-                "Si necesitas usar una capacidad del sistema local, genera un bloque JSON envuelto en triple acento grave y el identificador 'json_call'. Detén la generación de inmediato tras cerrar el bloque.\n"
-                "Formato:\n"
-                "```json_call\n"
-                "{\n"
-                "  \"capability\": \"<capability_id>\",\n"
-                "  \"action\": \"<action_name>\",\n"
-                "  \"params\": {}\n"
-                "}\n"
-                "```\n"
-            )
-        else:
-            capability_instructions = (
-                "\n\n### CAPABILITY INVOCATION PROTOCOL\n"
-                "If you need to use a local system capability, emit a JSON block wrapped in triple backticks and the 'json_call' identifier. Stop generation immediately after closing the block.\n"
-                "Format:\n"
-                "```json_call\n"
-                "{\n"
-                "  \"capability\": \"<capability_id>\",\n"
-                "  \"action\": \"<action_name>\",\n"
-                "  \"params\": {}\n"
-                "}\n"
-                "```\n"
-            )
-        system_prompt = f"{system_prompt}{capability_instructions}"
-
-        # 7.6 Inject Capability Catalog (Phase 4.1.2)
-        from runtime.capabilities.registry import get_capability_registry
+        # ── Capability Gate Evaluation ──────────────────────────────
         from config.settings import get_settings
-        
-        registry = get_capability_registry()
         settings = get_settings()
-        
-        cap_count = len(registry.capabilities)
-        approval_actions_count = sum(len(cap.approval_required_actions) for cap in registry.capabilities.values())
-        
-        logger.info(f"[CAPABILITY-CATALOG] capabilities={cap_count} approval_actions={approval_actions_count} lang={lang}")
-        
-        documents = 0
-        try:
-            from api.rag_models import RAGDocument
-            documents = db.query(RAGDocument).filter(RAGDocument.session_id == contract.session_id).count()
-        except Exception:
-            pass
 
-        catalog_lines = []
-        if lang == "ES":
-            catalog_lines.append("\n### CATÁLOGO DE CAPACIDADES DISPONIBLES")
-            catalog_lines.append("Solo puedes invocar las siguientes capacidades y acciones:")
-            for cap_id, cap in registry.capabilities.items():
-                status = cap.check(settings)
-                if not status.enabled:
-                    continue
-                if not status.available:
-                    continue
-                if cap_id == "rag" and documents == 0:
-                    continue
-                status_str = "activo" if status.enabled else "inactivo"
-                actions_list = []
-                for act_name in (cap.actions or {}):
-                    requires_app = " (Requiere aprobación)" if cap.requires_approval(act_name) else ""
-                    actions_list.append(f"`{act_name}`{requires_app}")
-                actions_str = ", ".join(actions_list) if actions_list else "ninguna"
-                catalog_lines.append(f"- **{cap_id}** [Estado: {status_str}] - Acciones: {actions_str}")
+        model_cfg = settings.models.get(contract.model_id, {}) if settings and hasattr(settings, "models") else {}
+        model_type = model_cfg.get("type", "general")
+
+        # Resolve capability mode based on model_type
+        if model_type == "agent":
+            cap_mode = "on"
+        elif model_type in ("coding", "reasoning", "moe", "moe_research"):
+            cap_mode = "on_if_skill"
         else:
-            catalog_lines.append("\n### AVAILABLE CAPABILITIES CATALOG")
-            catalog_lines.append("You are only allowed to invoke the following capabilities and actions:")
-            for cap_id, cap in registry.capabilities.items():
-                status = cap.check(settings)
-                if not status.enabled:
-                    continue
-                if not status.available:
-                    continue
-                if cap_id == "rag" and documents == 0:
-                    continue
-                status_str = "active" if status.enabled else "inactive"
-                actions_list = []
-                for act_name in (cap.actions or {}):
-                    requires_app = " (Requires Approval)" if cap.requires_approval(act_name) else ""
-                    actions_list.append(f"`{act_name}`{requires_app}")
-                actions_str = ", ".join(actions_list) if actions_list else "none"
-                catalog_lines.append(f"- **{cap_id}** [Status: {status_str}] - Actions: {actions_str}")
-                
-        capability_catalog = "\n".join(catalog_lines) + "\n"
-        system_prompt = f"{system_prompt}{capability_catalog}"
+            cap_mode = "off"
+
+        skill_uses_caps = (
+            skill_manifest is not None
+            and getattr(skill_manifest, "uses_capabilities", False)
+        )
+
+        capability_gate_open = (
+            cap_mode == "on"
+            or (cap_mode == "on_if_skill" and skill_uses_caps)
+        )
+
+        logger.info(
+            f"[CAPABILITY-GATE] model_id={contract.model_id} model_type={model_type} "
+            f"cap_mode={cap_mode} skill_uses_caps={skill_uses_caps} gate_open={capability_gate_open}"
+        )
+
+        if capability_gate_open:
+            # 7.5 Inject Capability Instructions (Cognitive Prompt for Phase 3.5)
+            if lang == "ES":
+                capability_instructions = (
+                    "\n\n### PROTOCOLO DE INVOCACIÓN DE CAPACIDADES\n"
+                    "Si necesitas usar una capacidad del sistema local, genera un bloque JSON envuelto en triple acento grave y el identificador 'json_call'. Detén la generación de inmediato tras cerrar el bloque.\n"
+                    "Formato:\n"
+                    "```json_call\n"
+                    "{\n"
+                    "  \"capability\": \"<capability_id>\",\n"
+                    "  \"action\": \"<action_name>\",\n"
+                    "  \"params\": {}\n"
+                    "}\n"
+                    "```\n"
+                )
+            else:
+                capability_instructions = (
+                    "\n\n### CAPABILITY INVOCATION PROTOCOL\n"
+                    "If you need to use a local system capability, emit a JSON block wrapped in triple backticks and the 'json_call' identifier. Stop generation immediately after closing the block.\n"
+                    "Format:\n"
+                    "```json_call\n"
+                    "{\n"
+                    "  \"capability\": \"<capability_id>\",\n"
+                    "  \"action\": \"<action_name>\",\n"
+                    "  \"params\": {}\n"
+                    "}\n"
+                    "```\n"
+                )
+            system_prompt = f"{system_prompt}{capability_instructions}"
+
+            # 7.6 Inject Capability Catalog (Phase 4.1.2)
+            from runtime.capabilities.registry import get_capability_registry
+            
+            registry = get_capability_registry()
+            
+            cap_count = len(registry.capabilities)
+            approval_actions_count = sum(len(cap.approval_required_actions) for cap in registry.capabilities.values())
+            
+            logger.info(f"[CAPABILITY-CATALOG] capabilities={cap_count} approval_actions={approval_actions_count} lang={lang}")
+            
+            documents = 0
+            try:
+                from api.rag_models import RAGDocument
+                documents = db.query(RAGDocument).filter(RAGDocument.session_id == contract.session_id).count()
+            except Exception:
+                pass
+
+            catalog_lines = []
+            if lang == "ES":
+                catalog_lines.append("\n### CATÁLOGO DE CAPACIDADES DISPONIBLES")
+                catalog_lines.append("Solo puedes invocar las siguientes capacidades y acciones:")
+                for cap_id, cap in registry.capabilities.items():
+                    status = cap.check(settings)
+                    if not status.enabled:
+                        continue
+                    if not status.available:
+                        continue
+                    if cap_id == "rag" and documents == 0:
+                        continue
+                    status_str = "activo" if status.enabled else "inactivo"
+                    actions_list = []
+                    for act_name in (cap.actions or {}):
+                        requires_app = " (Requiere aprobación)" if cap.requires_approval(act_name) else ""
+                        actions_list.append(f"`{act_name}`{requires_app}")
+                    actions_str = ", ".join(actions_list) if actions_list else "ninguna"
+                    catalog_lines.append(f"- **{cap_id}** [Estado: {status_str}] - Acciones: {actions_str}")
+            else:
+                catalog_lines.append("\n### AVAILABLE CAPABILITIES CATALOG")
+                catalog_lines.append("You are only allowed to invoke the following capabilities and actions:")
+                for cap_id, cap in registry.capabilities.items():
+                    status = cap.check(settings)
+                    if not status.enabled:
+                        continue
+                    if not status.available:
+                        continue
+                    if cap_id == "rag" and documents == 0:
+                        continue
+                    status_str = "active" if status.enabled else "inactive"
+                    actions_list = []
+                    for act_name in (cap.actions or {}):
+                        requires_app = " (Requires Approval)" if cap.requires_approval(act_name) else ""
+                        actions_list.append(f"`{act_name}`{requires_app}")
+                    actions_str = ", ".join(actions_list) if actions_list else "none"
+                    catalog_lines.append(f"- **{cap_id}** [Status: {status_str}] - Actions: {actions_str}")
+                    
+            capability_catalog = "\n".join(catalog_lines) + "\n"
+            system_prompt = f"{system_prompt}{capability_catalog}"
 
 
         # 8. Inject Coordinator context
@@ -403,7 +433,8 @@ class PureCoordinator:
             char_budget=char_budget,
             char_count=char_count,
             system_prompt_snapshot=system_prompt,
-            continuity_decision=decision
+            continuity_decision=decision,
+            capability_gate_open=capability_gate_open
         )
 
     def build_runtime_context_block(self, state: WorkflowState, active_skill: Optional[str]) -> str:

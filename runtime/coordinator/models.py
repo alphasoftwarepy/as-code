@@ -103,6 +103,9 @@ class ContextManifest(BaseModel):
     
     # Decisión de continuidad determinística
     continuity_decision: Optional[ContinuityDecision] = None
+    
+    # Capability Gate flag
+    capability_gate_open: bool = False
 
 class ContinuityDecision(BaseModel):
     """Resultado de decisión de continuidad (determinístico, serializable)."""

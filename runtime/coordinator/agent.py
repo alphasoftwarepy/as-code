@@ -156,6 +156,7 @@ class AgentControlRunner:
         inference_request: InferenceRequest,
         app_state=None,
         session_id: Optional[str] = None,
+        capability_gate_open: bool = False,
     ) -> ChatCompletionResponse:
         """Run the agent control loop in non-streaming mode."""
         step = 0
@@ -172,6 +173,13 @@ class AgentControlRunner:
             call = parse_capability_call(result.text)
             if not call:
                 # No tool call, generation finished
+                break
+
+            if not capability_gate_open:
+                logger.warning(
+                    f"[CAPABILITY-GATE] Capability call '{call.get('capability')}' blocked: "
+                    f"gate closed for model_id='{inference_request.model_id}'."
+                )
                 break
                 
             capability_id = call.get("capability")
@@ -244,6 +252,7 @@ class AgentControlRunner:
         inference_request: InferenceRequest,
         app_state=None,
         session_id: Optional[str] = None,
+        capability_gate_open: bool = False,
     ) -> AsyncIterator[InferenceResult]:
         """Run the agent control loop in streaming mode, yielding tokens."""
         step = 0
@@ -261,6 +270,13 @@ class AgentControlRunner:
                     
             call = parse_capability_call(assistant_buffer)
             if not call:
+                break
+
+            if not capability_gate_open:
+                logger.warning(
+                    f"[CAPABILITY-GATE] Capability call '{call.get('capability')}' blocked: "
+                    f"gate closed for model_id='{inference_request.model_id}'."
+                )
                 break
                 
             capability_id = call.get("capability")

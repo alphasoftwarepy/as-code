@@ -168,6 +168,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function startGeneration() {
         state.isGenerating = true;
+        const generationToken = Symbol('gen_' + Date.now());
+        state.currentGenerationToken = generationToken;
+
+        function isCurrentGeneration() {
+            return state.currentGenerationToken === generationToken;
+        }
+
         elements.sendBtn.classList.add('hidden');
         elements.stopBtn.classList.remove('hidden');
         elements.statusIndicator.className = 'status-dot status-busy';
@@ -186,6 +193,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let tokenCount = 0;
         let wasUserAborted = false;  // true ONLY when user clicked Stop or pressed Escape
         let providerUsed = '—';
+        let modelUsed = null;
 
         const requestBody = {
             model: elements.modelSelect.value,
@@ -215,6 +223,86 @@ document.addEventListener('DOMContentLoaded', () => {
             headers['X-Session-Id'] = window.memoryUI.getSessionId();
         }
 
+        function finalizeGeneration(reason, userAborted) {
+            if (!state.isGenerating && state.currentGenerationToken !== generationToken) return;
+
+            state.isGenerating = false;
+            state.currentGenerationToken = null;
+            state.abortController = null;
+
+            // Remove typing cursor always
+            const cursor = contentNode.querySelector('.typing-cursor');
+            if (cursor) cursor.remove();
+
+            if (fullText) {
+                contentNode.innerHTML = formatMarkdown(fullText);
+            } else if (!contentNode.innerHTML.trim()) {
+                contentNode.innerHTML = '<span class="text-surface-400/60 text-sm italic">—</span>';
+            }
+
+            // Final TPS and TTFT
+            const elapsedSec = (performance.now() - startTime) / 1000;
+            const finalTps = elapsedSec > 0 ? (tokenCount / elapsedSec).toFixed(1) : '—';
+            const ttftText = firstTokenTime ? `${(firstTokenTime - startTime).toFixed(0)} ms` : '—';
+            const modeText = elements.modelSelect.value === 'auto' ? 'AUTO' : 'MANUAL';
+            const totalDurationSec = elapsedSec.toFixed(2);
+
+            if (elements.telTps) elements.telTps.textContent = finalTps;
+            if (elements.telTokens) elements.telTokens.textContent = tokenCount;
+
+            // Append live metadata footer badge
+            if (fullText && !userAborted) {
+                const metaBadge = document.createElement('div');
+                metaBadge.className = 'mt-3 pt-2 border-t border-surface-800/60 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-surface-400/75 select-none font-mono';
+                metaBadge.innerHTML = `
+                    <span class="text-accent-400 font-semibold">${modelUsed || elements.modelSelect.value}</span>
+                    <span>•</span>
+                    <span>${providerUsed} (${modeText})</span>
+                    <span>•</span>
+                    <span>${tokenCount} tok</span>
+                    <span>•</span>
+                    <span>TTFT: ${ttftText}</span>
+                    <span>•</span>
+                    <span class="text-emerald-400 font-medium">${finalTps} tok/s</span>
+                    <span>•</span>
+                    <span>${totalDurationSec}s</span>
+                `;
+                contentNode.appendChild(metaBadge);
+            }
+
+            if (fullText) {
+                state.chatHistory.push({ role: 'assistant', content: fullText });
+            }
+
+            elements.sendBtn.classList.remove('hidden');
+            elements.stopBtn.classList.add('hidden');
+            elements.statusIndicator.className = 'status-dot status-ready';
+
+            if (userAborted && state.currentRequestId) {
+                const modelId = elements.modelSelect.value;
+                fetch(`/v1/cancel?request_id=${state.currentRequestId}&model_id=${modelId}`, { method: 'POST' }).catch(() => { });
+            }
+            state.currentRequestId = null;
+
+            console.log(`[UI-LIFECYCLE] Generation finalized: ${reason}`);
+        }
+
+        // Safe watchdog timeout (3 minutes)
+        const GENERATION_TIMEOUT_MS = 180000;
+        const generationTimeout = setTimeout(() => {
+            if (state.isGenerating && isCurrentGeneration()) {
+                console.warn('[app.js] GENERATION_TIMEOUT (3m) — forcing cancellation and UI cleanup');
+                if (state.abortController) {
+                    state.abortController.abort();
+                }
+                if (state.currentRequestId) {
+                    const modelId = elements.modelSelect.value;
+                    fetch(`/v1/cancel?request_id=${state.currentRequestId}&model_id=${modelId}`, { method: 'POST' }).catch(() => { });
+                }
+                finalizeGeneration('GENERATION_TIMEOUT', false);
+            }
+        }, GENERATION_TIMEOUT_MS);
+
         try {
             const response = await fetch('/v1/chat/completions', {
                 method: 'POST',
@@ -233,9 +321,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const reader = response.body.getReader();
             const decoder = new TextDecoder('utf-8');
             let buffer = '';
-            let modelUsed = null;
 
             while (true) {
+                if (!isCurrentGeneration()) break;
                 const { done, value } = await reader.read();
                 if (done) break;
 
@@ -244,6 +332,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 buffer = lines.pop(); // Keep incomplete line in buffer
 
                 for (const line of lines) {
+                    if (!isCurrentGeneration()) break;
                     if (line.startsWith('data: ')) {
                         const dataStr = line.substring(6).trim();
                         if (dataStr === '[DONE]') continue;
@@ -296,66 +385,17 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (e) {
             if (e.name === 'AbortError') {
-                wasUserAborted = true;  // User explicitly stopped — mark for cancel call
-                console.log('Generation stopped by user');
+                wasUserAborted = true;
+                console.log('Generation stopped by user or timeout');
             } else {
                 console.error('Generation error:', e);
                 fullText += `\n\n**[Error: ${e.message}]**`;
             }
         } finally {
-            state.isGenerating = false;
-            state.abortController = null;
-
-            // Finalize HTML
-            contentNode.innerHTML = formatMarkdown(fullText);
-
-            // Final TPS and TTFT
-            const elapsedSec = (performance.now() - startTime) / 1000;
-            const finalTps = elapsedSec > 0 ? (tokenCount / elapsedSec).toFixed(1) : '—';
-            const ttftText = firstTokenTime ? `${(firstTokenTime - startTime).toFixed(0)} ms` : '—';
-            const modeText = elements.modelSelect.value === 'auto' ? 'AUTO' : 'MANUAL';
-            const totalDurationSec = elapsedSec.toFixed(2);
-
-            if (elements.telTps) {
-                elements.telTps.textContent = finalTps;
+            clearTimeout(generationTimeout);
+            if (isCurrentGeneration()) {
+                finalizeGeneration(wasUserAborted ? 'USER_ABORTED' : 'COMPLETED', wasUserAborted);
             }
-            if (elements.telTokens) {
-                elements.telTokens.textContent = tokenCount;
-            }
-
-            // Append live metadata footer badge
-            if (fullText && !wasUserAborted) {
-                const metaBadge = document.createElement('div');
-                metaBadge.className = 'mt-3 pt-2 border-t border-surface-800/60 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-surface-400/75 select-none font-mono';
-                metaBadge.innerHTML = `
-                    <span class="text-accent-400 font-semibold">${modelUsed || elements.modelSelect.value}</span>
-                    <span>•</span>
-                    <span>${providerUsed} (${modeText})</span>
-                    <span>•</span>
-                    <span>${tokenCount} tok</span>
-                    <span>•</span>
-                    <span>TTFT: ${ttftText}</span>
-                    <span>•</span>
-                    <span class="text-emerald-400 font-medium">${finalTps} tok/s</span>
-                    <span>•</span>
-                    <span>${totalDurationSec}s</span>
-                `;
-                contentNode.appendChild(metaBadge);
-            }
-
-            state.chatHistory.push({ role: 'assistant', content: fullText });
-
-            elements.sendBtn.classList.remove('hidden');
-            elements.stopBtn.classList.add('hidden');
-            elements.statusIndicator.className = 'status-dot status-ready';
-
-            // ONLY call /v1/cancel when the user explicitly aborted.
-            // Do NOT cancel after successful completion — the stream already ended cleanly.
-            if (wasUserAborted && state.currentRequestId) {
-                const modelId = elements.modelSelect.value;
-                fetch(`/v1/cancel?request_id=${state.currentRequestId}&model_id=${modelId}`, { method: 'POST' }).catch(() => { });
-            }
-            state.currentRequestId = null;
 
             // Check if we need to refresh the title of the active chat
             const activeSessionId = localStorage.getItem('as_active_session_id');
