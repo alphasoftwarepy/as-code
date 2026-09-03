@@ -48,7 +48,18 @@ def _validate_call_envelope(val: dict) -> Optional[dict]:
         return None
     if cap not in KNOWN_CAPABILITY_IDS:
         return None
-    return val
+        
+    params = val.get("params", {})
+    if params is None:
+        params = {}
+    elif not isinstance(params, dict):
+        return None
+        
+    return {
+        "capability": cap.strip(),
+        "action": act.strip(),
+        "params": params
+    }
 
 def parse_capability_call(text: str) -> Optional[dict]:
     """Parse assistant text to find a structured capability json_call block.
@@ -57,6 +68,9 @@ def parse_capability_call(text: str) -> Optional[dict]:
     - Fenced code blocks of type 'json_call' or 'json'
     - Raw JSON blocks anywhere in the text containing "capability" and "action".
     """
+    if not text or not isinstance(text, str):
+        return None
+
     # 1. First look for fenced code blocks
     import re
     pattern = r"```(?:json_call|json)?\s*(\{\s*\"capability\".*?\})\s*```"

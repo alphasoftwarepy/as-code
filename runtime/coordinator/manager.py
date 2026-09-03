@@ -3,6 +3,7 @@ from typing import Optional, List
 from sqlalchemy.orm import Session
 from api.memory_models import MemoryVariable, MemoryTask, MemoryObservation
 from runtime.coordinator.models import WorkflowState, CoordinatorDecision, RuntimeContract, ContextManifest
+from runtime.graph.contracts import GraphProvider
 from runtime.coordinator.intent import analyze_intent
 from runtime.coordinator.workflow import load_workflow_state, update_workflow, process_task_progression, predict_next_workflow_state
 from runtime.coordinator.suggestions import get_suggested_skills
@@ -167,7 +168,8 @@ class PureCoordinator:
         skill_service = None,
         rag_service = None,
         memory_service = None,
-        enable_rag: bool = True
+        enable_rag: bool = True,
+        graph_provider: Optional[GraphProvider] = None
     ) -> ContextManifest:
         """
         Stateless & side-effect free assembly of the system prompt.
@@ -401,6 +403,84 @@ class PureCoordinator:
             except Exception:
                 pass
 
+        # 10.5 Optional Graph Layer (Fail-Safe, Bounded, Post-RAG)
+        char_budget = 16000
+        graph_used = False
+        graph_entities_count = 0
+        graph_relationships_count = 0
+        graph_activation_reason: Optional[str] = None
+        graph_enabled = False
+
+        if graph_provider is not None:
+            try:
+                graph_enabled = graph_provider.is_available()
+            except Exception as avail_err:
+                logger.warning(f"[GRAPH-LAYER] Error checking provider availability: {avail_err}")
+                graph_enabled = False
+
+        if graph_enabled:
+            try:
+                from api.project_models import ProjectChat
+                from runtime.graph.trigger import GraphTrigger
+                from runtime.graph.contracts import GraphQuery
+                from runtime.graph.formatter import RelationalContextFormatter
+                import inspect
+
+                # 1. Resolve project_id from session
+                chat_proj = db.query(ProjectChat).filter(
+                    ProjectChat.session_id == contract.session_id
+                ).first()
+                project_id = chat_proj.project_id if chat_proj else None
+
+                if not project_id:
+                    graph_activation_reason = "No project associated with active session"
+                    logger.debug(f"[GRAPH-LAYER] {graph_activation_reason} (session_id={contract.session_id})")
+                else:
+                    # 2. Evaluate GraphTrigger deterministically with domain=None
+                    trigger = GraphTrigger()
+                    trigger_decision = trigger.evaluate(query=rag_query, domain=None)
+                    graph_activation_reason = trigger_decision.reason
+
+                    if trigger_decision.needed:
+                        # 3. Char budget check BEFORE formatting/injection
+                        separator_cost = 2  # '\n\n'
+                        remaining_budget = char_budget - len(system_prompt) - separator_cost
+
+                        if remaining_budget <= 0:
+                            logger.warning(
+                                f"[GRAPH-LAYER] Remaining char budget exhausted ({remaining_budget} <= 0). "
+                                "Graph context omitted."
+                            )
+                            graph_activation_reason = "Exceeded char_budget prior to graph injection"
+                        else:
+                            # 4. Construct GraphQuery (project_id, query, domain=None)
+                            g_query = GraphQuery(
+                                project_id=project_id,
+                                query=rag_query,
+                                domain=None,
+                            )
+
+                            # 5. Invoke provider with signature inspection
+                            query_sig = inspect.signature(graph_provider.query)
+                            if "db" in query_sig.parameters:
+                                g_result = graph_provider.query(g_query, db=db)
+                            else:
+                                g_result = graph_provider.query(g_query)
+
+                            # 6. Format bounded relational context
+                            if g_result and g_result.graph_available:
+                                formatter = RelationalContextFormatter(max_chars=remaining_budget)
+                                graph_block = formatter.format(g_result)
+
+                                if graph_block:
+                                    system_prompt = f"{system_prompt}\n\n{graph_block}"
+                                    graph_used = True
+                                    graph_entities_count = len(g_result.entities)
+                                    graph_relationships_count = len(g_result.relationships)
+            except Exception as graph_err:
+                logger.warning(f"[GRAPH-LAYER] Graph integration failed (degrading to RAG-only): {graph_err}", exc_info=True)
+                graph_used = False
+
         # 11. Localize Headers
         if lang == "ES":
             if "## RUNTIME CONTEXT" in system_prompt:
@@ -413,7 +493,6 @@ class PureCoordinator:
                 system_prompt = system_prompt.replace("## RESEARCH CONTEXT", "## DOCUMENTOS")
 
         # 12. Limit checking
-        char_budget = 16000
         char_count = len(system_prompt)
         if char_count > char_budget:
             system_prompt = system_prompt[:char_budget]
@@ -434,7 +513,12 @@ class PureCoordinator:
             char_count=char_count,
             system_prompt_snapshot=system_prompt,
             continuity_decision=decision,
-            capability_gate_open=capability_gate_open
+            capability_gate_open=capability_gate_open,
+            graph_enabled=graph_enabled,
+            graph_used=graph_used,
+            graph_entities_count=graph_entities_count,
+            graph_relationships_count=graph_relationships_count,
+            graph_activation_reason=graph_activation_reason,
         )
 
     def build_runtime_context_block(self, state: WorkflowState, active_skill: Optional[str]) -> str:

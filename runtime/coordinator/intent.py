@@ -15,7 +15,7 @@ KEYWORD_MAPS: Dict[str, List[str]] = {
         "precios", "clientes", "prospect", "funnel", "conversión", "oferta", "propuesta", "pitch"
     ],
     "legal": [
-        "contrato", "legal", "ley", "cláusula", "ndia", "contract", "acuerdo", "firma", "riesgo",
+        "contrato", "legal", "ley", "cláusula", "nda", "contract", "acuerdo", "firma", "riesgo",
         "términos", "condiciones", "política", "abogado", "demanda", "propiedad intelectual",
         "regulaciones", "normativa", "clause", "nda", "compliance"
     ],

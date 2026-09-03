@@ -177,3 +177,38 @@ def test_streaming_lifecycle_single_stop_and_done():
         assert len(stop_chunks) == 1
 
     asyncio.run(run_test())
+
+
+def test_parser_handles_none_empty_and_non_dict_params():
+    assert parse_capability_call(None) is None
+    assert parse_capability_call("") is None
+    assert parse_capability_call(123) is None
+
+    # Null params parsed as empty dict
+    null_params = '```json_call\n{"capability": "git", "action": "status", "params": null}\n```'
+    call = parse_capability_call(null_params)
+    assert call is not None
+    assert call["params"] == {}
+
+    # Non-dict params rejected
+    invalid_params = '```json_call\n{"capability": "git", "action": "status", "params": "not-a-dict"}\n```'
+    assert parse_capability_call(invalid_params) is None
+
+
+def test_execute_capability_with_none_or_missing_params():
+    async def run_test():
+        engine = MagicMock()
+        mock_registry = MagicMock()
+        mock_cap = MagicMock()
+        mock_cap.check.return_value = MagicMock(available=True, enabled=True)
+        mock_cap.requires_approval.return_value = False
+        mock_cap.execute = AsyncMock(return_value={"success": True, "output": "ok"})
+        mock_registry.get.return_value = mock_cap
+
+        runner = AgentControlRunner(engine, registry=mock_registry)
+        result = await runner.execute_capability("terminal", "run", params=None)
+        assert result["success"] is True
+        mock_cap.execute.assert_called_once_with("run", {})
+
+    asyncio.run(run_test())
+

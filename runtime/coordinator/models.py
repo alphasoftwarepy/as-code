@@ -107,6 +107,20 @@ class ContextManifest(BaseModel):
     # Capability Gate flag
     capability_gate_open: bool = False
 
+    # ── Graph Layer (optional) ──────────────────────────────────
+    # All fields default to OFF / zero so existing callers require no changes.
+    # graph_enabled: the graph system is configured and available this request.
+    # graph_used:    a GraphProvider.query() was actually executed this request.
+    # graph_entities_count / graph_relationships_count: result counts for the
+    #   observability panel (Etapa 5 roadmap) and audit logs.
+    # graph_activation_reason: why the trigger decided to activate (or not).
+    #   Populated by GraphTrigger in a future gate; kept here for the manifest.
+    graph_enabled: bool = False
+    graph_used: bool = False
+    graph_entities_count: int = 0
+    graph_relationships_count: int = 0
+    graph_activation_reason: Optional[str] = None
+
 class ContinuityDecision(BaseModel):
     """Resultado de decisión de continuidad (determinístico, serializable)."""
     final_rag_query: str

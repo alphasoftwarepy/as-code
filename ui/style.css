@@ -1526,3 +1526,26 @@ body {
 
 .modal-btn-danger:hover { background: rgba(220, 80, 80, 1); }
 
+/* ── Agent Tool Execution Badge ──────────────────────────────── */
+.agent-tool-execution {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    background: rgba(59, 130, 246, 0.08);
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    border-radius: 6px;
+    padding: 0.3rem 0.65rem;
+    margin: 0.5rem 0;
+    font-size: 0.78rem;
+    color: #93c5fd;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.agent-tool-execution .tool-icon {
+    font-size: 0.85rem;
+}
+
+.agent-tool-execution .tool-name {
+    font-weight: 600;
+}
+

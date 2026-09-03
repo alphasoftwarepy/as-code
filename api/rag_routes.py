@@ -99,7 +99,17 @@ async def upload_rag_document(
 
     # Parse text
     try:
-        parsed = parse_document(str(file_path))
+        if suffix in ["md", "markdown"]:
+            from api.document_parser import ParsedDocument
+            text_md = content.decode("utf-8", errors="replace")
+            parsed = ParsedDocument(
+                filename=file.filename,
+                file_type="md",
+                text=text_md,
+                char_count=len(text_md),
+            )
+        else:
+            parsed = parse_document(str(file_path))
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Could not parse file: {e}")
 
@@ -157,6 +167,34 @@ async def upload_rag_document(
                     f"[RAG-BG-DONE] doc_id={doc_id!r} | "
                     f"filename={bg_doc.filename!r} | chunks={n}"
                 )
+
+                # ── Optional Graph Ingestion Hook (Gate 8.3) ──────────────
+                try:
+                    from api.project_models import ProjectDocument
+                    assoc = bg_db.query(ProjectDocument).filter(ProjectDocument.document_id == doc_id).first()
+                    if not assoc or not assoc.project_id:
+                        logger.info(f"[GRAPH-INGEST-SKIP] doc_id={doc_id!r} has no associated project")
+                    else:
+                        project_id = assoc.project_id
+                        from runtime.graph.ingestion import GraphIngestionPipeline
+                        graph_pipeline = GraphIngestionPipeline()
+                        graph_res = graph_pipeline.ingest_document(
+                            db=bg_db,
+                            project_id=project_id,
+                            document_id=doc_id,
+                            text=bg_doc.content,
+                            commit=True,
+                            propagate_exceptions=True,
+                        )
+                        logger.info(
+                            f"[GRAPH-INGEST-DONE] doc_id={doc_id!r} proj={project_id!r} | "
+                            f"status={graph_res.status} nodes={graph_res.nodes_created} edges={graph_res.edges_created}"
+                        )
+                except Exception as g_exc:
+                    logger.error(
+                        f"[GRAPH-INGEST-ERROR] doc_id={doc_id!r} | error={g_exc!r}",
+                        exc_info=True,
+                    )
             else:
                 logger.error(f"[RAG-BG-ERROR] doc_id={doc_id!r} not found in DB")
         except Exception as exc:

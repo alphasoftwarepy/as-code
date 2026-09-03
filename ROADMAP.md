@@ -1,139 +1,169 @@
-# ROADMAP — AS Core
+# 🗺️ MASTER ROADMAP — AS CORE
+# EVOLUCIÓN DEL COGNITIVE RUNTIME
 
-AS Core is evolving into a local-first cognitive workspace centered around projects, combining memory, documents, context, and execution.
+> DOCUMENTATION STATUS: UPDATED AGAINST CURRENT CODEBASE
+> DATE: 2026-08-29
 
----
-
-## ✅ Phase 1 — Core Runtime, RAG & Skills (Completed)
-
-*   **LiteRT-LM Windows Runtime:** GPU-accelerated local inference utilizing Gemma 3.
-*   **Smart Routing:** Multi-role orchestration (Chat, Code, Reasoning).
-*   **SSE Streaming & OpenAI API:** Drop-in compatibility for client tools (Cline, Continue, etc.).
-*   **Hardware-Adaptive Profiles:** Auto-tuning of parameters based on VRAM/CPU capability.
-*   **NotebookLM RAG Pipeline (RAG v2):**
-    *   Direct RAG ingest via `/api/rag/documents/upload`.
-    *   Local embeddings (`BAAI/bge-small-en-v1.5`) + FAISS index + SQLite metadata.
-    *   AST parsing for Python (.py), heading hierarchy for markdown, and structure-agnostic adaptive semantic segmenting (paragraph → sentence → char fallback) for PDFs, Word documents, and text.
-    *   Hybrid retrieval: `alpha * semantic + (1 - alpha) * keyword (BM25)`.
-    *   Structured context composition (`NotebookContextBuilder`) with `normal`, `thinking`, and `code` modes.
-*   **Runtime Capability Registry:** Dynamic discovery of environment primitives (Git, Terminal, Documents, RAG).
-*   **Skill Runtime v1:** Discoverable JSON manifests and dynamic system prompt injection framework.
+AS-Core evoluciona hacia un **Runtime Cognitivo Local** centrado en proyectos, combinando memoria, documentos, contexto, orquestación determinista y ejecución desacoplada.
 
 ---
 
-## ✅ Phase 2 — Working Memory Layer (Completed)
+## 🏛️ ETAPAS HISTÓRICAS DE FUNDACIÓN (COMPLETADAS)
 
-A structured short-term cognitive scratchpad to keep track of agent goals, variables, and observations, fully isolated by session.
+### ✅ Fase 1 — Core Runtime, RAG & Skills (Completada)
+*   **[VERIFIED] LiteRT-LM Windows Runtime:** Inferencia local acelerada para modelos densos compactos (Gemma 3n E2B, Gemma 4 E4B).
+*   **[VERIFIED] Smart Routing:** Orquestación por roles (Chat, Code, Reasoning, MoE).
+*   **[VERIFIED] SSE Streaming & OpenAI API:** Endpoints `/v1/chat/completions`, `/v1/models`, `/v1/status`, `/v1/cancel`.
+*   **[VERIFIED] NotebookLM RAG Pipeline (v2):** Ingesta híbrida SQLite/FAISS, chunking AST para Python, markdown jerárquico y adaptativo.
+*   **[VERIFIED] Dynamic Capability Registry:** Descubrimiento de primitivas del entorno (Documents, RAG, Git, Terminal).
+*   **[VERIFIED] Skill Runtime v1:** Carga dinámica de manifests JSON y prompts en markdown.
 
-*   **Session Isolation:** Explicit `session_id` on all memory tables for future-proof multi-chat / VSCode tab isolation.
-*   **Runtime-Native Protocol:** Simple endpoints (`/v1/memory/*`) for CRUD operations on variables, tasks, and observations.
-*   **Task Management:** Priority-aware task list (P0, P1...) allowing the agent to sort objectives.
-*   **Fact Tracking (Observations):** Observation logs categorized by source (`user`, `system`, `rag`, `capability`) for explanation and debugging.
-*   **System Prompt Injection:** Injects formatted memory state directly into the system context in the correct cognitive order: `base_prompt` → `skill_prompt` → `Working Memory` → `RAG Context` (user message) → `History` → `User Message`.
-*   **Event-Driven UI:** Collapsible Memory Drawer showing real-time state, updating only on interactions to save resources.
+### ✅ Fase 2 — Working Memory Layer (Completada)
+*   **[VERIFIED] Tablas de Memoria en SQLite:** Variables, tareas con prioridad y observaciones empíricas aisladas por `session_id`.
+*   **[VERIFIED] API CRUD de Memoria:** Endpoints bajo `/v1/memory/*`.
+*   **[VERIFIED] Inyección en Prompt de Sistema:** Formateo estructurado de la memoria activa en el prompt.
+*   **[VERIFIED] Memory UI Drawer:** Panel lateral interactivo en frontend para visualización y depuración en vivo.
 
----
+### ✅ Fase 3 — Smart Main Agent & Runtime Coordinator (Completada)
+*   **[VERIFIED] Runtime Coordinator Manager:** Control de límites de memoria (15 variables, 10 tareas, 20 observaciones).
+*   **[VERIFIED] Workflow State Machine:** Transiciones deterministas (`wf_objective`, `wf_phase`, `wf_focus`).
+*   **[VERIFIED] PureCoordinator & RuntimeContract:** Pipeline puro desacoplado: compilación de contexto sin efectos secundarios (`PureCoordinator.assemble`) y mutación atómica post-inferencia (`RuntimeStateMutator`).
+*   **[VERIFIED] Conversational Continuity:** `DeterministicContinuityResolver` y `DeterministicLanguageDetector` para resolución determinista de elipsis y anclaje de idioma.
+*   **[VERIFIED] Intent Gate & Prompt Family Registry:** Filtrado léxico con límites de palabra (`\b`) y centralización de plantillas en `PROMPT_FAMILIES`.
 
-## ✅ Phase 3 — Smart Main Agent Foundation & Runtime Coordinator (Completed)
+### ✅ Fase 4 — Capa de Proyectos & Persistencia (Completada)
+*   **[VERIFIED] Modelado de Proyectos:** Tablas `projects`, `project_chats`, `project_documents` y `project_chat_messages` en SQLite.
+*   **[VERIFIED] Scoping de Contexto:** Aislamiento de chats, documentos y mensajes por proyecto.
+*   **[VERIFIED] Persistencia de Historial y Autotítulo:** Guardado automático backend-driven de mensajes y generación de título automático.
 
-Developing the coordinator, deterministic state machines, task auto-progression, and recommended skills engine.
+### ✅ Fase 5 — Multi-Backend Inferencia & Skill Factory Experimental (Completada)
+*   **[VERIFIED] LlamaCppProvider:** Daemon aislado `llama-server.exe` sobre CUDA con SSE, polling de salud y auto-puerto.
+*   **[VERIFIED] Selector de Modelos UI:** Selector manual vs automático (`AUTO`, `Gemma E2B`, `Gemma E4B`, `OLMoE`, `Qwen MoE`).
+*   **[VERIFIED] VRAM Hot-Swapping:** Descarga cruzada del 100% de VRAM en `EngineManager` al alternar entre LiteRT y llama.cpp.
+*   **[VERIFIED] Skill Factory Experimental:** Sandbox aislado en `temp_skills/` con ciclo de testing y propuesta de skills sin tocar las oficiales.
 
-*   **Runtime Coordinator Manager:** Central orchestrator managing cognitive limits (15 vars, 10 tasks, 20 observations) to prevent token pollution.
-*   **Workflow State Machine:** Deterministic transition tracker (`wf_objective`, `wf_phase`, `wf_focus`) with automatic task progression based on user intent.
-*   **Skill Recommendation Engine:** Suggestions for switching/activating compatible runtime skills based on intent and phase.
-*   **Unified UI Integration:** Beautiful Workflow Header badge, active Phase pill, Current Focus info, and clickable Suggested Skill chips.
-*   **Output Stabilization Layer:** Line-buffering stdout sanitizer in provider stream to discard initialization logs and raw parameter echoes.
-*   **Backend Parameter Presets:** Semantic config presets (PRECISE, BALANCED, CREATIVE) mapped automatically to active pipelines/skills to prevent parameter drift.
-*   **Working Memory UX Clarifications:** Collapsible settings details layout, preset selector dropdown, operational info card, and section headers hover tooltips.
-*   **Runtime Hardening (Fase 1):**
-    *   **RuntimeContract**: Immutable model representing request state and session history.
-    *   **ContextManifest**: Serializable intermediate snapshot of prompts, budgets, and RAG details.
-    *   **PureCoordinator**: Stateless prompt assembly engine ensuring zero database writes during the prompt compilation phase.
-    *   **RuntimeStateMutator**: Post-inference atomic database mutator separating context rendering from side effects.
-    *   **Conversational Continuity (Continuity Fix)**: Pure deterministic `DeterministicContinuityResolver` and `DeterministicLanguageDetector` with `LightweightStateStore`. Resolves follow-up queries using entropy-based non-positional carryover, sticky language detection (preventing language oscillation), and explicit/implicit self-sufficiency triggers.
-    *   **Excel Parsing Support**: Seamless parsing of `.xlsx` and `.xlsm` formats via `openpyxl` into clean, structured Markdown tables, with row and column caps to protect the context window.
-    *   **Skill Suggestions Engine Hardening**: Reordered fallback skills to prioritize `"programming"`, expanded keywords to capture technical intents, and removed the early break limit to allow up to 3 recommendations.
-    *   **Working Memory Prompt Sanitation**: Filtered all internal `"wf_*"` variables from the system prompt block to prevent token bloat, and cleaned up the runtime context block by omitting phase/focus info and generic objectives.
-    *   **Session Isolation & Reset UX**: Prevents workflow and variable contamination across sessions by using dynamic session IDs, resetting client UI state on clear/upload, and purging old objective/phase data when the active skill transitions.
-
----
-
-## ✅ Phase 3.5 — Agent Control Loop & Native Call Parser (Completed)
-
-Developing the decision-making loop and output syntax parsing to allow the unified model to orchestrate its own actions.
-
-*   **Native Protocol Parser:** Stream-aware XML or JSON tag listener detecting capability execution requests (e.g. `{"capability": "git", "action": "status", "params": {}}`).
-*   **Server-Side Agent Loop:** Intercepting capability calls, suspending generation, executing the action, and feeding outputs back into the chat loop.
-*   **Cognitive Prompt Tuning:** Formatting base instructions to guide the model on when to write to memory and when to call tools.
-
----
-
-## ✅ Phase 3.6 — Intent Routing & Prompt Resolution (Completed)
-
-A cycle of surgical fixes to the intent routing, persona resolution, and workflow instrumentation layers, validated through production logs and automated regression tests.
-
-*   **Session-Scoped RAG (Active Document Context):** RAG retrieval strictly filtered by active `session_id`. Document uploads preserve the current session. RAG is disabled when no documents exist in the session.
-*   **User Intent Gate:** `analyze_intent` returns an empty list immediately when the user message contains no skill-specific keywords. Word-boundary matching (`\b`) blocks sub-word false positives.
-*   **Prompt Family Registry:** New `runtime/coordinator/prompts.py` centralizes all prompt templates under `PROMPT_FAMILIES`. Resolution driven by `prompt_family` in each skill `manifest.json`. No hardcoded skill lists in the coordinator.
-*   **BUSINESS_PROMPT decoupled from analytical structure:** Removed mandatory DIAGNOSTICO / ANALISIS / ACCION sections. Now defines domain identity only, letting the LLM adapt output format to the actual task type.
-*   **WorkflowContinuationResolver (v1_passthrough):** New architectural extension point separating workflow continuity from retrieval continuity. Emits `[WORKFLOW-TRACE]` logs for evidence collection before continuity rules are derived.
-
-> See [`dev-notes/ARQUITECTURA.md`](dev-notes/ARQUITECTURA.md) for validated invariants that must not be modified without impact analysis.
+### ✅ Fase 6 — Subsistema Knowledge Graph & Relational Reasoning (Completada & Cerrada)
+*   **[VERIFIED] Gate 1 — Stabilization & Baseline:** Congelamiento de código de producción previo y suite base de regresión (137 tests GREEN).
+*   **[VERIFIED] Gate 2 — Contratos & Tipos Canónicos:** Modelos Pydantic desacoplados (`GraphEntity`, `GraphRelationship`, `GraphQuery`, `GraphQueryResult`, `GraphProvider`) en `runtime/graph/contracts.py`.
+*   **[VERIFIED] Gate 3 — Storage & Persistencia SQLite:** Tablas `graph_nodes`, `graph_edges` y `graph_build_status` con aislamiento por `project_id` e idempotencia vía `GraphStore`.
+*   **[VERIFIED] Gate 4 — Extracción & Resolución Cross-Document:** `StructuralExtractor`, `normalize_label`, `normalize_key` y `EntityResolver` para resolución unificada de entidades multiorigen.
+*   **[VERIFIED] Gate 5 — Query Engine & Bounded Traversal:** `GraphQueryEngine` con BFS acotado (`max_depth`, `max_nodes`, `timeout_seconds`) y corte estricto de ciclos.
+*   **[VERIFIED] Gate 6 — Trigger & Formateador Relacional:** `GraphTrigger` léxico y `RelationalContextFormatter` para inyección de contexto Markdown estructurado en el prompt del LLM.
+*   **[VERIFIED] Gate 7 — Runtime Coordinator Integration:** Integración opcional, lazy, fail-safe y bounded en el `RuntimeCoordinator` y `/v1/chat/completions`.
+*   **[VERIFIED] Gate 8 (8.1 - 8.6) — Ingestión, Hardening, Fidelidad y Cierre:**
+    - Hook de ingestión en upload RAG (`GraphIngestionPipeline`) con rollback atómico y fail-safe isolation.
+    - Validación canónica con dataset empresarial real (01 a 05): 11/11 relaciones exactas, 0 relaciones falsas (`Carlos -> depende de -> María` = 0).
+    - Cierre arquitectónico, multi-chat unificado por proyecto, 10x determinismo y 207 tests de regresión pasando (0 fallos, 0 regresiones).
 
 ---
 
-## 🚧 Phase 4 — Project Layer (Next)
+# 🚀 COGNITIVE RUNTIME EVOLUTION (ROADMAP MAESTRO)
 
-Establishing the core entity that groups all sessions, documents, and memory states under unified project boundaries.
+El roadmap maestro organiza la evolución cognitiva de AS-Core en ocho bloques estratégicos, separando estrictamente el desarrollo de producto de las líneas de investigación de I+D.
 
-*   **Project Entity Setup:** Database models and tables to map active projects (`project_id`).
-*   **Project-Scoped Context:** Storing and isolating chats, documents, and variables under their corresponding project.
-*   **Project Memory & Knowledge:** Enabling cross-session variables, permanent facts, and project-level knowledge parameters.
-*   **Multi-Chat Projects:** Grouping multiple conversations under a single active project scope.
-
----
-
-## 🔮 Phase 5 — Capability Execution
-
-Expanding capabilities by providing execution primitives directly within capability classes for general workflows.
-
-*   **Base Interface Extension:** Extending `BaseCapability` to support async actions.
-*   **Local Terminal Command Runner:** Running shell processes safely, handling outputs, timeouts, and return codes.
-*   **Local Filesystem Interface (File processing):** Safely reading, writing, moving, and indexing workspace files for document processing and CRM data generation.
-*   **Git Interface Integration:** Operational capability wrapper to fetch status, diffs, and stage commits.
-*   **Reporting automation:** Execution of background reporting scripts and document analysis workflows.
-*   **Scope Security Boundaries:** Enforcing permission boundaries before letting a skill invoke a capability.
-
----
-
-## 🔮 Phase 6 — Human Approval & Governance (HITL)
-
-Adding user confirmation gates for high-impact or destructive operations.
-
-*   **Suspended Execution Queue:** FastAPI state queue keeping pending commands.
-*   **HITL API Endpoints:** Endpoints `/v1/capabilities/pending` and `/v1/capabilities/confirm`.
-*   **Interactive UI Modal:** Consent dialog inside the browser UI to allow the user to modify or approve commands.
+```text
+┌────────────────────────────────────────────────────────────────────────┐
+│                        PRODUCT DEVELOPMENT                             │
+│                                                                        │
+│  [ETAPA 1] ───► [ETAPA 2] ───► [ETAPA 3] ───► [ETAPA 4] ───► [ETAPA 5] │
+│  Hardening      Cognitive      Intelligent     Dynamic         Cognitive│
+│  Agent/UI       Interpreter    Model Select    Skills + Test   UI & Obs │
+│                                                                        │
+│  [ETAPA 6] ───────────────────► [ETAPA 7]                              │
+│  Visual Prompt Engineer         Multi-Provider Consolidation           │
+└────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│                        I+D / INVESTIGACIÓN                             │
+│                                                                        │
+│  [ETAPA 8] MoE Residency Engine vs llama.cpp (Aislado en core/moe/)    │
+└────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## 🔮 Phase 7 — Workspace Automation
-
-Enabling background scheduling, file-watch execution triggers, and batch processing pipelines.
+## 📦 BLOQUES DE DESARROLLO DE PRODUCTO (PRODUCT DEVELOPMENT)
 
 ---
 
-## 🔮 Phase 8 — VSCode / Cline Integration
-
-Exposing the Unified Agent Runtime to external developer editors as secondary connectors.
-
-*   **Workspace Sync API:** Syncing working folders, cursor positions, and open file buffers.
-*   **Cline / Continue Adapters:** Formatting local routes to act as custom providers for standard extensions.
+### 🛡️ ETAPA 1 — Agent Loop + UI Hardening
+- **Objetivo:** Eliminar llamadas espurias a herramientas, sanitizar outputs, blindar el Capability Gate y garantizar la finalización limpia del stream SSE y el ciclo de vida de la UI (sin cursores huérfanos ni estados congelados).
+- **Estado:** 🔄 **EN PLANIFICACIÓN / PRIORIDAD INMEDIATA**
+- **Dependencias:** Ninguna (base existente).
+- **Prioridad:** P0 (Crítica).
+- **Riesgo:** 🟡 YELLOW (modificación acotada de runtime y UI existente).
+- **Resultado Esperado:** Agent loop robusto con Capability Gate 100% determinista, UI que finaliza limpiamente en el 100% de los casos y suite de tests 100% GREEN.
 
 ---
 
-## 🔮 Phase 9 — Multi-User Collaboration & Authentication
+### 🧠 ETAPA 2 — Capa de Interpretación Cognitiva (Cognitive Interpreter)
+- **Objetivo:** Construir una capa de interpretación intermedia entre el input del usuario y el coordinador que extraiga intenciones estructuradas, reformule consultas complejas, identifique restricciones explícitas y descomponga objetivos multietapa.
+- **Estado:** ⬜ Pendiente (Depende de Etapa 1).
+- **Dependencias:** Etapa 1 completada, `RuntimeContract`, `PureCoordinator`.
+- **Prioridad:** P1.
+- **Riesgo:** 🟡 YELLOW.
+- **Resultado Esperado:** Detección de intenciones precisa y contextual sin agregar modelos neuronales pesados para tareas heurísticas.
 
-Security layer for team servers and shared GPU homelabs over VPN, preventing data leakage.
+---
 
-*   **Secure Authentication:** Secure logins, password hashing (bcrypt), and JWT tokens.
-*   **Private Data Isolation:** Database filters to partition chats, projects, and knowledge bases by `user_id`.
+### 🎯 ETAPA 3 — Intelligent Model Selection 2.0
+- **Objetivo:** Evolucionar el SmartRouter hacia un selector cognitivo consciente del estado de hardware (VRAM/RAM libre), complejidad de la tarea requerida y capacidades activas, preservando el control manual del usuario (`MANUAL > AUTO`).
+- **Estado:** ⬜ Pendiente.
+- **Dependencias:** Etapa 1 y Etapa 2.
+- **Prioridad:** P1.
+- **Riesgo:** 🟡 YELLOW.
+- **Resultado Esperado:** Enrutamiento dinámico óptimo entre modelos ligeros (Gemma 2B) y de razonamiento/MoE (Gemma 4B, Qwen MoE) con latencia mínima.
+
+---
+
+### 🏭 ETAPA 4 — Dynamic Skills / Skill Factory + Testing Loop
+- **Objetivo:** Consolidar el ciclo de vida completo de las habilidades dinámicas (`draft` $\to$ `testing` $\to$ `candidate` $\to$ `proposal` $\to$ `promotion`), integrando el bucle de edición, testing iterativo y análisis de regresión en el Skills Lab.
+- **Estado:** 🔄 Parcialmente implementado en backend (`factory.py`, `temporary.py`) y UI básica.
+- **Dependencias:** Etapa 1 y Etapa 2.
+- **Prioridad:** P2.
+- **Riesgo:** 🟢 GREEN (completamente aislado en sandbox).
+- **Resultado Esperado:** Creación, prueba y promoción segura de nuevas habilidades sin riesgo de corrupción de las skills oficiales.
+
+---
+
+### 📊 ETAPA 5 — UI Cognitiva / Observabilidad
+- **Objetivo:** Proveer una experiencia de usuario interactiva y transparente que visualice el proceso de pensamiento del runtime (árbol de decisiones del coordinador, trazas de intención, scoring de recuperación RAG y métricas de ejecución por paso).
+- **Estado:** ⬜ Pendiente.
+- **Dependencias:** Etapa 1 a 4.
+- **Prioridad:** P2.
+- **Riesgo:** 🟡 YELLOW.
+- **Resultado Esperado:** Observabilidad completa del runtime cognitivo en la interfaz gráfica sin penalizaciones de rendimiento.
+
+---
+
+### 🎨 ETAPA 6 — Visual Prompt Engineer
+- **Objetivo:** Editor visual interactivo integrado para diseñar, simular, ajustar variables de contexto (`[LANG]`, `{working_memory}`, `{rag_context}`) y realizar linting de prompts de sistema en tiempo real con cálculo de presupuesto de tokens.
+- **Estado:** ⬜ Pendiente.
+- **Dependencias:** Etapa 4 y 5.
+- **Prioridad:** P3.
+- **Riesgo:** 🟢 GREEN (herramienta aditiva).
+- **Resultado Esperado:** Entorno visual para la ingeniería y calibración de directivas del agente.
+
+---
+
+### 🔌 ETAPA 7 — Multi-Provider Consolidation
+- **Objetivo:** Estandarizar la abstracción `InferenceProvider` para soportar de forma homogénea múltiples backends locales y remotos con contratos unificados de cancelación, streaming, health-checks y auto-recuperación de procesos daemon.
+- **Estado:** 🔄 Base funcional existente (`litert_cli` + `llamacpp`).
+- **Dependencias:** Etapa 1 a 6.
+- **Prioridad:** P3.
+- **Riesgo:** 🟡 YELLOW.
+- **Resultado Esperado:** Capa de proveedores de inferencia intercambiable y tolerante a fallos.
+
+---
+
+## 🔬 LÍNEA DE INVESTIGACIÓN Y EXPERIMENTACIÓN (I+D)
+
+---
+
+### 🧪 ETAPA 8 — MoE Residency Engine R&D vs llama.cpp
+- **Objetivo:** Investigar y optimizar el motor propio de residencia dinámica MoE (`core/moe/`) evaluando estrategias de swapping LRU (VRAM $\leftrightarrow$ RAM $\leftrightarrow$ NVMe), cuantización mixta y pre-enrutamiento de capas para modelos MoE grandes en GPUs de consumo (4GB-8GB VRAM).
+- **Condición de Promoción a Producción:** Permanecerá estrictamente en el entorno experimental de `core/moe/` hasta demostrar de manera reproducible una superioridad cuantitativa en throughput (tok/s), latencia y estabilidad frente a `llama.cpp` en escenarios reales de Windows.
+- **Estado:** 🔬 **I+D ACTIVA / AISLADA DE PRODUCCIÓN**
+- **Dependencias:** Pesos GGUF locales, CUDA / PyTorch.
+- **Prioridad:** I+D (Línea paralela).
+- **Riesgo:** 🔴 RED si se integra a producción; 🟢 GREEN en su sandbox de investigación.
+- **Resultado Esperado:** Benchmarks cuantitativos y reportes comparativos frente a `llama.cpp`.

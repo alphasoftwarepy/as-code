@@ -30,7 +30,7 @@ class AgentControlRunner:
         self,
         capability_id: str,
         action: str,
-        params: dict,
+        params: Optional[dict] = None,
         app_state=None,
         session_id: Optional[str] = None,
         db: Optional[Session] = None
@@ -39,6 +39,7 @@ class AgentControlRunner:
         if hasattr(self.engine, "touch_activity"):
             self.engine.touch_activity()
             
+        params = params if isinstance(params, dict) else {}
         cap = self.registry.get(capability_id)
         if not cap:
             logger.warning(f"[CAPABILITY-GOVERNANCE] Invocation rejected: capability '{capability_id}' not found in registry.")

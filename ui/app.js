@@ -230,13 +230,13 @@ document.addEventListener('DOMContentLoaded', () => {
             state.currentGenerationToken = null;
             state.abortController = null;
 
-            // Remove typing cursor always
-            const cursor = contentNode.querySelector('.typing-cursor');
-            if (cursor) cursor.remove();
+            // Remove typing cursor from the entire DOM deterministically
+            document.querySelectorAll('.typing-cursor').forEach(cursor => cursor.remove());
 
-            if (fullText) {
-                contentNode.innerHTML = formatMarkdown(fullText);
-            } else if (!contentNode.innerHTML.trim()) {
+            const trimmedText = (fullText || '').trim();
+            if (trimmedText) {
+                contentNode.innerHTML = formatMarkdown(trimmedText);
+            } else if (!contentNode.innerHTML.trim() || contentNode.innerHTML === '<span class="typing-cursor"></span>') {
                 contentNode.innerHTML = '<span class="text-surface-400/60 text-sm italic">—</span>';
             }
 
@@ -251,7 +251,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (elements.telTokens) elements.telTokens.textContent = tokenCount;
 
             // Append live metadata footer badge
-            if (fullText && !userAborted) {
+            if (trimmedText && !userAborted) {
                 const metaBadge = document.createElement('div');
                 metaBadge.className = 'mt-3 pt-2 border-t border-surface-800/60 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-surface-400/75 select-none font-mono';
                 metaBadge.innerHTML = `
@@ -270,10 +270,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 contentNode.appendChild(metaBadge);
             }
 
-            if (fullText) {
-                state.chatHistory.push({ role: 'assistant', content: fullText });
+            if (trimmedText) {
+                state.chatHistory.push({ role: 'assistant', content: trimmedText });
             }
 
+            // Always restore controls deterministically
             elements.sendBtn.classList.remove('hidden');
             elements.stopBtn.classList.add('hidden');
             elements.statusIndicator.className = 'status-dot status-ready';
@@ -429,7 +430,10 @@ document.addEventListener('DOMContentLoaded', () => {
             state.abortController.abort(); // Cancels fetch
         }
 
+        elements.sendBtn.classList.remove('hidden');
+        elements.stopBtn.classList.add('hidden');
         elements.statusIndicator.className = 'status-dot status-ready';
+        document.querySelectorAll('.typing-cursor').forEach(cursor => cursor.remove());
     }
 
     function clearChat() {
@@ -538,6 +542,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // Bold: **text**
         html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
 
+        // Capability visual execution tag: ⚙️ **[Running capability.action...]**
+        html = html.replace(/⚙️\s*&lt;strong&gt;\[Running\s+([a-zA-Z0-9_\-\.]+)\.\.\.\]&lt;\/strong&gt;/g, '<div class="agent-tool-execution"><span class="tool-icon">⚙️</span> <span class="tool-name">Running $1</span></div>');
+
         // Line breaks
         html = html.replace(/\n/g, '<br>');
 
@@ -567,8 +574,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         } catch (e) {
-            // Silently fail telemetry on connection error
-            elements.statusIndicator.className = 'status-dot status-error';
+            // Silently fail telemetry on connection error only if not generating
+            if (!state.isGenerating) {
+                elements.statusIndicator.className = 'status-dot status-error';
+            }
         }
     }
 

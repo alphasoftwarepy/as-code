@@ -38,9 +38,11 @@ def init_db(db_path: str = "data/rag.db") -> None:
     from api.rag_models import Base  # noqa: F401
     from api.memory_models import MemoryBase  # noqa: F401
     from api.project_models import ProjectBase  # noqa: F401
+    from api.graph_models import GraphBase  # noqa: F401
     Base.metadata.create_all(bind=_engine)
     MemoryBase.metadata.create_all(bind=_engine)
     ProjectBase.metadata.create_all(bind=_engine)
+    GraphBase.metadata.create_all(bind=_engine)
 
     # Simple column migration for session_id
     from sqlalchemy import text

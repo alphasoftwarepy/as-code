@@ -141,29 +141,32 @@ async def stream_inference_results(
                 ],
             )
             yield f"data: {guard_chunk.model_dump_json()}\n\n"
+            terminal_sent = True
 
         # Persist assistant response and autotitle if database connection is available
         if session_id and db and assistant_buffer:
-            full_assistant_text = "".join(assistant_buffer)
-            try:
-                from runtime.projects.manager import ProjectManager
-                pm = ProjectManager()
-                pm.add_chat_message(db, session_id, role="assistant", content=full_assistant_text)
-                
-                # Autotitle checking
-                chat = pm.get_chat_by_session(db, session_id)
-                if chat and (chat.title == "Nuevo Chat" or chat.title.startswith("Chat ")):
-                    msgs = pm.list_chat_messages(db, session_id)
-                    user_msgs = [m for m in msgs if m.role == "user"]
-                    if user_msgs:
-                        first_user_msg = user_msgs[0].content
-                        new_title = generate_auto_title(first_user_msg)
-                        if new_title and new_title != "Nuevo Chat":
-                            pm.rename_chat(db, session_id, new_title)
-                            logger.info(f"[AUTOTITLE] Auto-titled chat {session_id} to '{new_title}'")
-            except Exception as save_err:
-                logger.error(f"Error persisting assistant message or autotitling in stream: {save_err}")
+            full_assistant_text = "".join(assistant_buffer).strip()
+            if full_assistant_text:
+                try:
+                    from runtime.projects.manager import ProjectManager
+                    pm = ProjectManager()
+                    pm.add_chat_message(db, session_id, role="assistant", content=full_assistant_text)
+                    
+                    # Autotitle checking
+                    chat = pm.get_chat_by_session(db, session_id)
+                    if chat and (chat.title == "Nuevo Chat" or chat.title.startswith("Chat ")):
+                        msgs = pm.list_chat_messages(db, session_id)
+                        user_msgs = [m for m in msgs if m.role == "user"]
+                        if user_msgs:
+                            first_user_msg = user_msgs[0].content
+                            new_title = generate_auto_title(first_user_msg)
+                            if new_title and new_title != "Nuevo Chat":
+                                pm.rename_chat(db, session_id, new_title)
+                                logger.info(f"[AUTOTITLE] Auto-titled chat {session_id} to '{new_title}'")
+                except Exception as save_err:
+                    logger.error(f"Error persisting assistant message or autotitling in stream: {save_err}")
 
         # Always end with [DONE] exactly once
         yield "data: [DONE]\n\n"
+
 

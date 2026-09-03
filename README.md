@@ -50,6 +50,12 @@ AS-Core has evolved from a local chat server into an extensible, project-centric
 * **Phase 3 (Smart Main Agent Foundation & Runtime Hardening):** Unified Runtime Coordinator managing memory limits, deterministic workflow transitions, and skill suggestions. Includes output stabilization, backend presets, and runtime hardening (immutable `RuntimeContract`/`ContextManifest` flow).
 * **Phase 3.5 & 3.6 (Agent Loop & Intent Gate):** Server-side agent loops, native execution protocol parsing (`capability.execute()`), session-scoped RAG (Active Retrieval Scope), intent gate keyword boundaries (`\b`), and prompt family registry.
 * **Phase 4 (Project Layer):** Scoping chats, documents, and memory under unified `project_id` boundaries.
+* **Phase 6 / Knowledge Graph Subsystem (Latest):** 
+  - **Relational Knowledge Graph:** Optional, fail-safe, project-scoped relational reasoning subsystem.
+  - **Deterministic Extraction & Resolution:** Extracts structural S-V-O relationships and unifies entities cross-document without false relations.
+  - **Bounded Traversal (BFS):** Strict control over cognitive exploration (`max_depth`, `max_nodes`, `timeout_seconds`) with cycle interruption.
+  - **RAG + Graph Dual Retrieval:** Documents uploaded via RAG trigger incremental, atomic Graph persistence with complete provenance (`source_doc_id`).
+  - **Prompt Injection:** Seamless Markdown formatting of multi-hop relational context injected directly into the LLM system prompt.
 
 ---
 
@@ -59,6 +65,7 @@ AS-Core has evolved from a local chat server into an extensible, project-centric
 * **MoE Dynamic Residency:** Run massive Mixture of Experts models exceeding your GPU VRAM without crashing.
 * **Hardware-Adaptive Profiles:** Auto-tunes settings (VRAM pools, GPU offload layers, thread allocation) to match system specs.
 * **Working Memory Layer:** Persistent, session-aware short-term memory (variables, tasks, observations) injected dynamically at the SYSTEM level.
+* **Knowledge Graph Layer:** Local SQLite relational graph (`graph_nodes`, `graph_edges`) providing deterministic cross-document entity connections and structural reasoning.
 * **RAG NotebookLM (RAG v2):** Multi-stage local pipeline: parses, AST-aware chunking, generates local embeddings, stores metadata in SQLite + vectors in FAISS, and executes hybrid retrieval.
 * **Low-Overhead Hot-Swapping:** Intelligent model loading and idle timeout unloads with zero memory leaks.
 * **Browser-First UI:** Premium browser interface with real-time streaming and direct document drop zone.
@@ -112,8 +119,8 @@ AS-Core uses a modular architecture built on top of FastAPI, LiteRT-LM, and LLaM
 Clone the repository and run the setup script:
 
 ```powershell
-git clone https://github.com/alphasoftwarepy/as-code.git
-cd as-code
+git clone https://github.com/alphasoftwarepy/as-core.git
+cd as-core
 .\scripts\install.ps1
 ```
 

@@ -223,13 +223,22 @@ async def chat_completions(
         rag_service = getattr(request.app.state, "rag_service", None)
         memory_service = getattr(request.app.state, "memory", None)
         
+        graph_provider = None
+        try:
+            from runtime.graph.query import GraphQueryEngine
+            graph_provider = GraphQueryEngine()
+        except Exception as gp_err:
+            logger.warning(f"Failed to instantiate GraphQueryEngine (degrading to RAG-only): {gp_err}")
+            graph_provider = None
+
         manifest = pure_coord.assemble(
             db=db,
             contract=contract,
             skill_service=skill_service,
             rag_service=rag_service,
             memory_service=memory_service,
-            enable_rag=settings.enable_rag_mode
+            enable_rag=settings.enable_rag_mode,
+            graph_provider=graph_provider,
         )
         system_prompt = manifest.system_prompt_snapshot
         resolved_skill = manifest.active_skill
